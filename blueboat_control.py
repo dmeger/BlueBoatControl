@@ -46,7 +46,7 @@ def computeControl( x ):
 # as much as possible.
 
 # VARIABLES FOR GUI/INTERACTION
-screen_width, screen_height = 800, 400   # set the width and height of the window
+screen_width, screen_height = 800, 800   # set the width and height of the window
                            # (you can increase or decrease if you want to, just remind to keep even numbers)
 Done = False                # if True,out of while loop, and close pygame
 Pause = False               # when True, freeze the pendulum. This is 
@@ -62,11 +62,16 @@ cart_width = 30
 cart_height = 15
 pole_length = 100
 cart_x_to_screen_scaling = 100.0
+boat_img_size = (100,49)
+trailer_img_size = (300,125)
+trailer_pos = (400,100)
 
 #BEFORE STARTING GUI
 pygame.init()
 background = pygame.display.set_mode((screen_width, screen_height))
 #clock = pygame.time.Clock()
+boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
+trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
 
 # A simple class to simulate cartpole physics using an ODE solver
 class CartPole(object):
@@ -116,15 +121,43 @@ class CartPole(object):
     def to_screen(self,x,y):
         return (int(screen_width/2+x*cart_x_to_screen_scaling),int(screen_height/2+y*cart_x_to_screen_scaling))
 
+    def blitRotate(self,surf, image, pos, originPos, angle):
+
+        # offset from pivot to center
+        image_rect = image.get_rect(topleft = (pos[0] - originPos[0], pos[1]-originPos[1]))
+        offset_center_to_pivot = pygame.math.Vector2(pos) - image_rect.center
+        
+        # roatated offset from pivot to center
+        rotated_offset = offset_center_to_pivot.rotate(-angle)
+
+        # roatetd image center
+        rotated_image_center = (pos[0] - rotated_offset.x, pos[1] - rotated_offset.y)
+
+        # get a rotated image
+        rotated_image = pygame.transform.rotate(image, angle)
+        rotated_image_rect = rotated_image.get_rect(center = rotated_image_center)
+
+        # rotate and blit the image
+        surf.blit(rotated_image, rotated_image_rect)
+
     # Draw the cart and pole
     def draw(self, bg):  
         boat_rad = 20.0
         boat_centre = self.to_screen(self.x[0],self.x[1])
-        boat_direction = (int(boat_centre[0]+boat_rad*np.cos(self.x[2])),int(boat_centre[1]+boat_rad*np.sin(self.x[2])))
-        pygame.draw.circle(bg, Dark_red, boat_centre, radius - 2)
-        pygame.draw.lines(bg, black, False, [boat_centre, boat_direction], 2)
-        pygame.draw.rect(bg,black,pygame.Rect(self.to_screen(self.TRAILER_LEFT_X,self.TRAILER_LEFT_Y),(self.TRAILER_HEIGHT*cart_x_to_screen_scaling,self.TRAILER_WIDTH*cart_x_to_screen_scaling)))
+        
+        #boat_direction = (int(boat_centre[0]+boat_rad*np.cos(self.x[2])),int(boat_centre[1]+boat_rad*np.sin(self.x[2])))
+        #pygame.draw.circle(bg, Dark_red, boat_centre, radius - 2)
+        #pygame.draw.lines(bg, black, False, [boat_centre, boat_direction], 2)
 
+        self.blitRotate(bg,boat_img,boat_centre,(int(boat_img_size[0]/2),int(boat_img_size[1]/2)),self.x[2]*180.0/np.pi)
+
+        boat_motor = (int(boat_centre[0]-boat_img_size[0]/2*np.cos(self.x[2])),int(boat_centre[1]+boat_img_size[0]/2*np.sin(self.x[2])))
+        linear_thrust_arrow = (int(boat_motor[0]-self.u[0]*np.cos(self.x[2])),int(boat_motor[1]+self.u[0]*np.sin(self.x[2])))
+        angular_thrust_arrow = (int(boat_motor[0]-5*self.u[1]*np.sin(self.x[2])),int(boat_motor[1]-5*self.u[1]*np.cos(self.x[2])))
+        pygame.draw.lines(bg, Dark_red, False, [boat_motor, linear_thrust_arrow], 2)
+        pygame.draw.lines(bg, Dark_red, False, [boat_motor, angular_thrust_arrow], 2)
+
+        #pygame.draw.rect(bg,black,pygame.Rect(self.to_screen(self.TRAILER_LEFT_X,self.TRAILER_LEFT_Y),(self.TRAILER_HEIGHT*cart_x_to_screen_scaling,self.TRAILER_WIDTH*cart_x_to_screen_scaling)))
 
     def minangle(theta):
         while theta > np.pi:
@@ -137,15 +170,20 @@ class CartPole(object):
     # for a pole of uniform mass using the Lagrangian method.
     def dynamics(self,t,z):
 
-        f = self.u # d2x/dt2, d2y/dt2, d2theta/dt2
+        f = self.u                                                              # u[0] body-centric thrust
+                                                                                # u[1] rotation force
+        
+        # Compute global linear force
+        fx = self.u[0] * np.cos(z[2])
+        fy = -self.u[0] * np.sin(z[2])
 
         dz = np.zeros((6,1))
         dz[0] = z[3]                                                            # x
         dz[1] = z[4]                                                            # y
         dz[2] = z[5]                                                            # theta
-        dz[3] = f[0] - 0.7*z[3]                                                 # dx/dt
-        dz[4] = f[1] - 0.7*z[4]                                                 # dy/dt
-        dz[5] = f[2] - 0.7*z[5]                                                 # dtheta/dt
+        dz[3] = fx - 3*z[3]                                                   # dx/dt
+        dz[4] = fy - 3*z[4]                                                   # dy/dt
+        dz[5] = f[1] - 3*z[5]                                                 # dtheta/dt
 
         return dz
 
@@ -178,6 +216,7 @@ def grid():
         pygame.draw.lines(background, gray, False, [(x, 0), (x, screen_height)])
         for y in range(50, screen_height, 50):
             pygame.draw.lines(background, gray, False, [(0, y), (screen_width, y)])
+    background.blit(trailer_img,trailer_pos)
  
 # Clean up the screen and draw a fresh grid and the cartpole with its latest state coordinates
 def redraw(): 
@@ -199,8 +238,8 @@ state = pendulum.get_state()
 print(state)
 
 LINACCEL = 4.0
-ROTACCEL = 0.01
-control = [0,0,0]
+ROTACCEL = 2.0
+control = [0,0]
 
 while not Done:
     #clock.tick(30)             # GUI refresh rate
@@ -211,38 +250,23 @@ while not Done:
             Done = True                                   
         if event.type == pygame.KEYDOWN:    # "r" key resets the simulator
             if event.key == pygame.K_r:
+                control = [0,0]
                 pendulum.reset()
             if event.key == pygame.K_p:     # holding "p" key freezes time
                 Pause = True
             if event.key == pygame.K_UP:
-                control[1] = -LINACCEL
+                control[0] = control[0]+LINACCEL
             if event.key == pygame.K_DOWN:
-                control[1] = LINACCEL
+                control[0] = control[0]-LINACCEL
             if event.key == pygame.K_RIGHT:
-                control[0] = LINACCEL
+                control[1] = control[1]-ROTACCEL
             if event.key == pygame.K_LEFT:
-                control[0] = -LINACCEL
-            if event.key == pygame.K_a:
-                control[2] = ROTACCEL
-            if event.key == pygame.K_s:
-                control[2] = ROTACCEL
+                control[1] = control[1]+ROTACCEL    
             if event.key == pygame.K_q:
                 Done = True
         if event.type == pygame.KEYUP:      # releasing "p" makes us live again
             if event.key == pygame.K_p:
                 Pause = False
-            if event.key == pygame.K_UP:
-                control[1] = 0
-            if event.key == pygame.K_DOWN:
-                control[1] = 0
-            if event.key == pygame.K_RIGHT:
-                control[0] = 0
-            if event.key == pygame.K_LEFT:
-                control[0] = 0
-            if event.key == pygame.K_a:
-                control[2] = 0
-            if event.key == pygame.K_s:
-                control[2] = 0
 
     if not Pause:
         #print(control)
