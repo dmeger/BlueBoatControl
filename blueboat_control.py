@@ -18,6 +18,7 @@ import math
 import numpy as np
 from scipy.integrate import ode
 import clock
+import sys
 
 # The very basic code you should know and interact with starts here. Sets some variables that you 
 # might change or add to, then defines a function to do control that is currently empty. Add
@@ -46,6 +47,29 @@ def computeControl( x ):
 # You should not have to change anything below this, but are encouraged to read and understand
 # as much as possible.
 
+# CONTROLLER
+# Check for command-line argument specifying the controller type
+controller_type = "xbox"  # Default to Xbox controller
+if len(sys.argv) > 1:
+    controller_type = sys.argv[1].lower()
+
+if controller_type == "xbox":
+    THROTTLE_AXIS = 1
+    STEERING_AXIS = 2
+    THROTTLE_MULTIPLIER = -1.0
+    STEERING_MULTIPLIER = -1.0
+    print("Using Xbox controller config.")
+elif controller_type == "ps4":
+    THROTTLE_AXIS = 1
+    STEERING_AXIS = 2
+    THROTTLE_MULTIPLIER = -1.0
+    STEERING_MULTIPLIER = -1.0
+    print("Using PS4 controller config.")
+else:
+    print("Invalid controller type. Please use 'xbox' or 'ps4'.")
+    sys.exit()
+
+
 # VARIABLES FOR GUI/INTERACTION
 screen_width, screen_height = 800, 800   # set the width and height of the window
                            # (you can increase or decrease if you want to, just remind to keep even numbers)
@@ -70,7 +94,6 @@ pygame.display.set_caption("BlueBoat Control") # set the title of the window
 pygame.joystick.init() # initialize the joystick
 joystick = pygame.joystick.Joystick(0) # create a joystick object
 joystick.init() # initialize the joystick
-
 background = pygame.display.set_mode((screen_width, screen_height))
 #clock = pygame.time.Clock()
 boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
@@ -274,10 +297,10 @@ while not Done:
             if event.key == pygame.K_p:
                 Pause = False
         if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
-            if event.axis == 1:  # Left stick vertical axis = throttle
-                control[0] = JOY_MAX_LIN_ACCEL * -joystick.get_axis(1)
-            if event.axis == 2:  # Right stick horizontal axis = steering 
-                control[1] = JOY_MAX_ROT_ACCEL * -joystick.get_axis(2)
+            if event.axis == THROTTLE_AXIS:  # Left stick vertical axis = throttle
+                control[0] = JOY_MAX_LIN_ACCEL * joystick.get_axis(THROTTLE_AXIS) * THROTTLE_MULTIPLIER
+            if event.axis == STEERING_AXIS:  # Right stick horizontal axis = steering 
+                control[1] = JOY_MAX_ROT_ACCEL * joystick.get_axis(STEERING_AXIS) * STEERING_MULTIPLIER
             
     if not Pause:
         #print(control)
