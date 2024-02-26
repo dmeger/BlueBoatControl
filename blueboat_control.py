@@ -43,6 +43,25 @@ def computeControl( x ):
 
     return control
 
+def computeJoystickControl(throttle, steering):
+     # Update driving mode based on user input
+    print(f"Throttle: {throttle}, Steering: {steering}")
+    if abs(throttle) < 2:   # If throttle is not applied
+        current_mode = NEUTRAL
+        clamped_throttle = 0
+        clamped_steering = steering
+    elif throttle > 0:          # If throttle is positive
+        current_mode = FORWARD
+        clamped_throttle = min(FORWARD_MAX_LIN_ACCEL, max(FORWARD_MIN_LIN_ACCEL, throttle)) # Clamp throttle to valid range
+        # TODO clamp steering to valid range (thrust vector must be between -25 and 25 degrees, --> it depends on throttle)
+        clamped_steering = min(MAX_ROT_ACCEL, max(-MAX_ROT_ACCEL, steering))
+    elif throttle < 0:          # If throttle is negative
+        current_mode = REVERSE
+        clamped_throttle = - min(REVERSE_MAX_LIN_ACCEL, max(REVERSE_MIN_LIN_ACCEL, abs(throttle))) # Clamp throttle to valid range
+        # TODO clamp steering to valid range (thrust vector must be between -25 and 25 degrees, --> it depends on throttle)
+        clamped_steering = min(MAX_ROT_ACCEL, max(-MAX_ROT_ACCEL, steering))
+    return clamped_throttle, clamped_steering, current_mode
+
 # After this is all the code to run the BlueBoat physics, draw it on the screen, etc. 
 # You should not have to change anything below this, but are encouraged to read and understand
 # as much as possible.
@@ -87,6 +106,17 @@ coord_to_screen_scaling = 100.0
 boat_img_size = (100,49)
 trailer_img_size = (300,125)
 trailer_pos = (400,100)
+throttle_bar_width = 200
+throttle_bar_height = 20
+throttle_bar_position = (screen_width // 2 - throttle_bar_width // 2, 700)
+steering_bar_width = 200
+steering_bar_height = 20
+steering_bar_position = (screen_width // 2 - steering_bar_width // 2, 750)
+
+
+# FONT
+pygame.font.init()
+font = pygame.font.SysFont("Arial", 20)
 
 #BEFORE STARTING GUI
 pygame.init()
@@ -235,6 +265,46 @@ class BlueBoat(object):
 
     def get_state(self):
         return self.x
+    
+    def display_driving_mode(self, bg):
+        mode_text = font.render(f"Mode: {current_mode.capitalize()}", True, black)
+        bg.blit(mode_text, (10, 10))
+    
+    def draw_throttle_bar(self, bg, throttle, clamped_throttle):
+        throttle_percentage = (throttle / FORWARD_MAX_LIN_ACCEL) * 100
+        clamped_throttle_percentage = (clamped_throttle / FORWARD_MAX_LIN_ACCEL) * 100
+        tick_color = (0, 0, 0)  # Black for the tick
+        if throttle >= 0:
+            throttle_bar_color = (0, 255, 0)  # Green for forward
+            pygame.draw.rect(bg, throttle_bar_color, (throttle_bar_position[0], throttle_bar_position[1], throttle_percentage * throttle_bar_width / 100, throttle_bar_height))
+        else:
+            throttle_bar_color = (255, 0, 0) # Red for reverse
+            pygame.draw.rect(bg, throttle_bar_color, (throttle_bar_position[0] + (throttle_percentage) * throttle_bar_width / 100, throttle_bar_position[1], - throttle_percentage * throttle_bar_width / 100, throttle_bar_height))
+        
+        # Draw the tick as a vertical line
+        pygame.draw.line(bg, tick_color, (throttle_bar_position[0] + (clamped_throttle_percentage) * throttle_bar_width / 100,
+                                            throttle_bar_position[1]),
+                                            (throttle_bar_position[0] + (clamped_throttle_percentage) * throttle_bar_width / 100,
+                                            throttle_bar_position[1] + throttle_bar_height),
+                                            2)
+            
+
+    def draw_steering_bar(self, bg, steering, clamped_steering):
+        steering_percentage = (-steering / MAX_ROT_ACCEL) * 100
+        clamped_steering_percentage = (-clamped_steering / MAX_ROT_ACCEL) * 100
+        steering_bar_color = (0, 0, 255) # Blue
+        tick_color = (0, 0, 0)  # Black for the tick
+        if steering <= 0:
+            pygame.draw.rect(bg, steering_bar_color, (steering_bar_position[0], steering_bar_position[1], steering_percentage * steering_bar_width / 100, steering_bar_height))
+        else:
+            pygame.draw.rect(bg, steering_bar_color, (steering_bar_position[0] + (steering_percentage) * steering_bar_width / 100, steering_bar_position[1], - steering_percentage * steering_bar_width / 100, steering_bar_height))
+        
+        # Draw the tick as a vertical line
+        pygame.draw.line(bg, tick_color, (steering_bar_position[0] + (clamped_steering_percentage) * steering_bar_width / 100,
+                                            steering_bar_position[1]),
+                                            (steering_bar_position[0] + (clamped_steering_percentage) * steering_bar_width / 100,
+                                            steering_bar_position[1] + steering_bar_height),
+                                            2)
 
 # The next two are just helper functions for the display.
 # Draw a grid behind the BlueBoat, and the trailer.
@@ -250,6 +320,9 @@ def redraw():
     background.fill(white)
     grid()
     boat.draw(background)
+    boat.draw_throttle_bar(background, throttle, clamped_throttle)
+    boat.draw_steering_bar(background, steering, clamped_steering)
+    boat.display_driving_mode(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
     pygame.display.update()
@@ -264,11 +337,27 @@ print(boat)
 state = boat.get_state()
 print(state)
 
-LINACCEL = 4.0
-JOY_MAX_LIN_ACCEL = 16.0
-ROTACCEL = 2.0
-JOY_MAX_ROT_ACCEL = 8.0
+FORWARD_MIN_LIN_ACCEL = 6.0
+FORWARD_MAX_LIN_ACCEL = 16.0
+REVERSE_MIN_LIN_ACCEL = 2.0
+REVERSE_MAX_LIN_ACCEL = 8.0
+MAX_ROT_ACCEL = 8.0
+
+LINACCEL_INCR = 4.0
+ROTACCEL_INCR = 2.0
 control = [0,0]
+
+# Define driving modes
+NEUTRAL = "neutral"
+FORWARD = "forward"
+REVERSE = "reverse"
+
+# Initialize variables
+current_mode = NEUTRAL
+throttle = 0
+steering = 0
+clamped_throttle = 0
+clamped_steering = 0
 
 while not Done:
     #clock.tick(30)             # GUI refresh rate
@@ -284,13 +373,13 @@ while not Done:
             if event.key == pygame.K_p:     # holding "p" key freezes time
                 Pause = True
             if event.key == pygame.K_UP:
-                control[0] = control[0]+LINACCEL
+                control[0] = control[0]+LINACCEL_INCR
             if event.key == pygame.K_DOWN:
-                control[0] = control[0]-LINACCEL
+                control[0] = control[0]-LINACCEL_INCR
             if event.key == pygame.K_RIGHT:
-                control[1] = control[1]-ROTACCEL
+                control[1] = control[1]-ROTACCEL_INCR
             if event.key == pygame.K_LEFT:
-                control[1] = control[1]+ROTACCEL    
+                control[1] = control[1]+ROTACCEL_INCR    
             if event.key == pygame.K_q:
                 Done = True
         if event.type == pygame.KEYUP:      # releasing "p" makes us live again
@@ -298,12 +387,15 @@ while not Done:
                 Pause = False
         if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
             if event.axis == THROTTLE_AXIS:  # Left stick vertical axis = throttle
-                control[0] = JOY_MAX_LIN_ACCEL * joystick.get_axis(THROTTLE_AXIS) * THROTTLE_MULTIPLIER
+                throttle = FORWARD_MAX_LIN_ACCEL * joystick.get_axis(THROTTLE_AXIS) * THROTTLE_MULTIPLIER
             if event.axis == STEERING_AXIS:  # Right stick horizontal axis = steering 
-                control[1] = JOY_MAX_ROT_ACCEL * joystick.get_axis(STEERING_AXIS) * STEERING_MULTIPLIER
-            
+                steering = MAX_ROT_ACCEL * joystick.get_axis(STEERING_AXIS) * STEERING_MULTIPLIER
+            # display throttle and steering values
+
     if not Pause:
         #print(control)
+        clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+        control = [clamped_throttle, clamped_steering]
         #control = computeControl( state )  # This is the call to the code you write
         state = boat.step(control)
         #print(state)
