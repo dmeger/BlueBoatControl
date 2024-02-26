@@ -1,7 +1,8 @@
 '''
-This file holds a cartpole simulator using physics functions borrowed from a previous 
+This file holds a BlueBoat simulator using physics functions borrowed from a previous 
 research project. Those are: 
 Copyright (c) 2017, Juan Camilo Gamboa Higuera, Anqi Xu, Victor Barbaros, Alex Chatron-Michaud, David Meger
+Copyright (c) 2024, Zhizun Wang, Louis Petit, David Meger
 
 The GUI is new in 2020 and was started from the pendulum code of Wesley Fernandes
 https://pastebin.com/zTZVi8Yv
@@ -22,17 +23,17 @@ import clock
 # might change or add to, then defines a function to do control that is currently empty. Add
 # more logic in and around that function to make your controller work/learn!
 
-x0 = [0,0,0,0,0,0]                      # This specifies the average starting state 
-x0 = [0,0,0,0,0,0]               
-                                        # change this if you want to do swing-up.
+x0 = [0,0,0,0,0,0]                      # This specifies the average starting state               
                                         # The meaning of the state dimensions are 
-                                        # state[0] : cart position (x)
-                                        # state[1] : cart velocity (x_dot)
-                                        # state[2] : pole angular velocity (theta_dot)
-                                        # state[3] : pole angle (theta)
+                                        # state[0] : boat position (x)
+                                        # state[1] : boat position (y)
+                                        # state[2] : boat angle (theta)
+                                        # state[3] : boat velocity (x)
+                                        # state[4] : boat velocity (y)
+                                        # state[5] : boat angular velocity (theta_dot)
 
-goal = np.array([ 0, 0, 0, np.pi ])     # This is where we want to end up. Perfectly at the centre  
-                                        # with the pole vertical.
+goal = np.array([ 0, 0, 0, np.pi ])     # This is where we want to end up. Perfectly at the centre
+                                        # of the screen, with the boat pointing to the right.
 
 # TODO: Fill in this function
 def computeControl( x ):
@@ -41,7 +42,7 @@ def computeControl( x ):
 
     return control
 
-# After this is all the code to run the cartpole physics, draw it on the screen, etc. 
+# After this is all the code to run the BlueBoat physics, draw it on the screen, etc. 
 # You should not have to change anything below this, but are encouraged to read and understand
 # as much as possible.
 
@@ -49,7 +50,7 @@ def computeControl( x ):
 screen_width, screen_height = 800, 800   # set the width and height of the window
                            # (you can increase or decrease if you want to, just remind to keep even numbers)
 Done = False                # if True,out of while loop, and close pygame
-Pause = False               # when True, freeze the pendulum. This is 
+Pause = False               # when True, freeze the boat. This is 
                             # for debugging purposes
  
 #COLORS
@@ -58,23 +59,25 @@ black = (0,0,0)
 gray = (150, 150, 150)
 Dark_red = (150, 0, 0)
 radius = 20
-cart_width = 30
-cart_height = 15
-pole_length = 100
-cart_x_to_screen_scaling = 100.0
+coord_to_screen_scaling = 100.0
 boat_img_size = (100,49)
 trailer_img_size = (300,125)
 trailer_pos = (400,100)
 
 #BEFORE STARTING GUI
 pygame.init()
+pygame.display.set_caption("BlueBoat Control") # set the title of the window
+pygame.joystick.init() # initialize the joystick
+joystick = pygame.joystick.Joystick(0) # create a joystick object
+joystick.init() # initialize the joystick
+
 background = pygame.display.set_mode((screen_width, screen_height))
 #clock = pygame.time.Clock()
 boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
 trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
 
-# A simple class to simulate cartpole physics using an ODE solver
-class CartPole(object):
+# A simple class to simulate BlueBoat physics using an ODE solver
+class BlueBoat(object):
  
     # State holds x, x_dot, theta_dot, theta (radians)
     def __init__(self, X0):  
@@ -90,7 +93,7 @@ class CartPole(object):
 
         self.u = 0
 
-        # This is a key line that makes this class an accurate version of cartpole dynamics.
+        # This is a key line that makes this class an accurate version of BlueBoat dynamics.
         # The ODE solver is connected with our instantaneous dynamics equations so it can do 
         # the hard work of computing the motion over time for us.
         self.solver = ode(self.dynamics).set_integrator('dopri5', atol=1e-12, rtol=1e-12) 
@@ -119,7 +122,7 @@ class CartPole(object):
     TRAILER_WIDTH = 0.1
 
     def to_screen(self,x,y):
-        return (int(screen_width/2+x*cart_x_to_screen_scaling),int(screen_height/2+y*cart_x_to_screen_scaling))
+        return (int(screen_width/2+x*coord_to_screen_scaling),int(screen_height/2+y*coord_to_screen_scaling))
 
     def blitRotate(self,surf, image, pos, originPos, angle):
 
@@ -140,7 +143,7 @@ class CartPole(object):
         # rotate and blit the image
         surf.blit(rotated_image, rotated_image_rect)
 
-    # Draw the cart and pole
+    # Draw the boat
     def draw(self, bg):  
         boat_rad = 20.0
         boat_centre = self.to_screen(self.x[0],self.x[1])
@@ -157,7 +160,7 @@ class CartPole(object):
         pygame.draw.lines(bg, Dark_red, False, [boat_motor, linear_thrust_arrow], 2)
         pygame.draw.lines(bg, Dark_red, False, [boat_motor, angular_thrust_arrow], 2)
 
-        #pygame.draw.rect(bg,black,pygame.Rect(self.to_screen(self.TRAILER_LEFT_X,self.TRAILER_LEFT_Y),(self.TRAILER_HEIGHT*cart_x_to_screen_scaling,self.TRAILER_WIDTH*cart_x_to_screen_scaling)))
+        #pygame.draw.rect(bg,black,pygame.Rect(self.to_screen(self.TRAILER_LEFT_X,self.TRAILER_LEFT_Y),(self.TRAILER_HEIGHT*coord_to_screen_scaling,self.TRAILER_WIDTH*coord_to_screen_scaling)))
 
     def minangle(theta):
         while theta > np.pi:
@@ -167,7 +170,8 @@ class CartPole(object):
 
     # These equations are simply typed in from the dynamics 
     # on the assignment document. They have been derived 
-    # for a pole of uniform mass using the Lagrangian method.
+    # for a boat with a motor and a rudder, and are a simplified
+    # version of the full dynamics of the boat.
     def dynamics(self,t,z):
 
         f = self.u                                                              # u[0] body-centric thrust
@@ -210,7 +214,7 @@ class CartPole(object):
         return self.x
 
 # The next two are just helper functions for the display.
-# Draw a grid behind the cartpole
+# Draw a grid behind the BlueBoat, and the trailer.
 def grid():  
     for x in range(50, screen_width, 50):
         pygame.draw.lines(background, gray, False, [(x, 0), (x, screen_height)])
@@ -218,11 +222,11 @@ def grid():
             pygame.draw.lines(background, gray, False, [(0, y), (screen_width, y)])
     background.blit(trailer_img,trailer_pos)
  
-# Clean up the screen and draw a fresh grid and the cartpole with its latest state coordinates
+# Clean up the screen and draw a fresh grid and the BlueBoat with its latest state coordinates
 def redraw(): 
     background.fill(white)
     grid()
-    pendulum.draw(background)
+    boat.draw(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
     pygame.display.update()
@@ -231,14 +235,16 @@ def redraw():
 
 # Starting here is effectively the main function.
 # It's a simple GUI drawing loop that calls to your code to compute the control, sets it to the 
-# cartpole class and loops the GUI to show what happened.
-pendulum = CartPole(x0) 
-print(pendulum)
-state = pendulum.get_state()
+# BlueBoat class and loops the GUI to show what happened.
+boat = BlueBoat(x0) 
+print(boat)
+state = boat.get_state()
 print(state)
 
 LINACCEL = 4.0
+JOY_MAX_LIN_ACCEL = 16.0
 ROTACCEL = 2.0
+JOY_MAX_ROT_ACCEL = 8.0
 control = [0,0]
 
 while not Done:
@@ -248,10 +254,10 @@ while not Done:
     #if False:
         if event.type == pygame.QUIT:                    
             Done = True                                   
-        if event.type == pygame.KEYDOWN:    # "r" key resets the simulator
-            if event.key == pygame.K_r:
+        if event.type == pygame.KEYDOWN:    # keyboard control
+            if event.key == pygame.K_r:     # "r" key resets the simulator
                 control = [0,0]
-                pendulum.reset()
+                boat.reset()
             if event.key == pygame.K_p:     # holding "p" key freezes time
                 Pause = True
             if event.key == pygame.K_UP:
@@ -267,11 +273,16 @@ while not Done:
         if event.type == pygame.KEYUP:      # releasing "p" makes us live again
             if event.key == pygame.K_p:
                 Pause = False
-
+        if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
+            if event.axis == 1:  # Left stick vertical axis = throttle
+                control[0] = JOY_MAX_LIN_ACCEL * -joystick.get_axis(1)
+            if event.axis == 2:  # Right stick horizontal axis = steering 
+                control[1] = JOY_MAX_ROT_ACCEL * -joystick.get_axis(2)
+            
     if not Pause:
         #print(control)
         #control = computeControl( state )  # This is the call to the code you write
-        state = pendulum.step(control)
+        state = boat.step(control)
         #print(state)
 
     redraw()
