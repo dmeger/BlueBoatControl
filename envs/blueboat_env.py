@@ -98,8 +98,15 @@ trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png")
 
 # reward model for blue boat
 class BlueBoatReward(object):
-    def __init__(self):  
+    def __init__(self, boat_pos, trailer_pos):  
         super(BlueBoatReward, self).__init__()
+        self.boat_pos = np.asarray(boat_pos)
+        self.trailer_pos = np.asarray(trailer_pos)
+        
+    def get_reward(self):
+        diff = self.boat_pos - self.trailer_pos
+        reward = np.linalg.norm(diff, ord=2)
+        return reward
 
 # A simple class to simulate BlueBoat physics using an ODE solver
 class BlueBoat(gym.Env):
@@ -107,9 +114,7 @@ class BlueBoat(gym.Env):
  
     # State holds x, x_dot, theta_dot, theta (radians)
     def __init__(self, model=None, X0=None):
-        
-        if model is None:
-            model = BlueBoatModel()
+        super(BlueBoat, self).__init__()
         self.g = 9.82
         self.m = 0.5
         self.M = 0.5
@@ -117,14 +122,30 @@ class BlueBoat(gym.Env):
         self.b = 1.0
         self.Done = False                # if True,out of while loop, and close pygame
         self.Pause = False               # when True, freeze the boat. This is 
-
         # self.X0 = self.x = np.array(x0,dtype=np.float64).flatten()
         self.X0 = np.array(X0,dtype=np.float64).flatten()
         self.x = self.X0
         self.t = 0
+        
+        self.model = model
+        if model is None:
+            self.model = BlueBoatModel(self.X0)
+        self.bpos = self.x[:2]
+        self.bpos = np.asarray(self.bpos)
+        self.tpos = np.asarray(trailer_pos)
+        self.reward_f = BlueBoatReward(boat_pos=self.bpos, trailer_pos=self.tpos)
+        
+        high = np.array([128, 128], dtype=np.float32)
+        self.action_space = spaces.Box(-high, high, dtype=np.float32)
+        
+        # initialize observation space as the combination of state and action spaces 
+        self.observation_space = spaces.Dict(
+            {"state_space": spaces.Box(-screen_width, screen_width, shape=(1, 6), dtype=np.float32),
+            "action_space": spaces.Box(-high, high, dtype=np.float32),
+            })
 
-        self.u = 0
-
+        # self.u = 0
+        self.u = [0,0]
         # This is a key line that makes this class an accurate version of BlueBoat dynamics.
         # The ODE solver is connected with our instantaneous dynamics equations so it can do 
         # the hard work of computing the motion over time for us.
