@@ -109,7 +109,12 @@ Pause = False               # when True, freeze the boat. This is
 white = (255,255,255)
 black = (0,0,0)
 gray = (150, 150, 150)
+green = (0, 255, 0)
+red = (255, 0, 0)
 Dark_red = (150, 0, 0)
+light_blue = (173, 216, 230)
+light_red = (255, 182, 193)
+light_green = (144, 238, 144)
 radius = 20
 coord_to_screen_scaling = 100.0
 boat_img_size = (100,49)
@@ -228,15 +233,15 @@ class BlueBoat(object):
     def draw_throttle_bar(self, bg, throttle, clamped_throttle):
         throttle_percentage = (throttle / FORWARD_MAX_LIN_ACCEL) * 100
         clamped_throttle_percentage = (clamped_throttle / FORWARD_MAX_LIN_ACCEL) * 100
-        tick_color = (0, 0, 0)  # Black for the tick
+        tick_color = black  # Black for the tick
         throttle_label = font.render("Throttle", True, black)
         if throttle >= 0:
-            throttle_bar_color = (0, 255, 0)  # Green for forward
+            throttle_bar_color = light_green  # Green for forward
             pygame.draw.rect(bg, throttle_bar_color, (throttle_bar_position[0], throttle_bar_position[1], throttle_percentage * throttle_bar_width / 100, throttle_bar_height))
             # Display "throttle" label on the left of the bar
             bg.blit(throttle_label, (throttle_bar_position[0] - 100, throttle_bar_position[1]))
         else:
-            throttle_bar_color = (255, 0, 0) # Red for reverse
+            throttle_bar_color = light_red # Red for reverse
             pygame.draw.rect(bg, throttle_bar_color, (throttle_bar_position[0] + (throttle_percentage) * throttle_bar_width / 100, throttle_bar_position[1], - throttle_percentage * throttle_bar_width / 100, throttle_bar_height))
             # Display "throttle" label on the right of the bar
             bg.blit(throttle_label, (throttle_bar_position[0] + 10, throttle_bar_position[1]))
@@ -253,8 +258,8 @@ class BlueBoat(object):
     def draw_steering_bar(self, bg, steering, clamped_steering):
         steering_percentage = (-steering / MAX_ROT_ACCEL) * 100
         clamped_steering_percentage = (-clamped_steering / MAX_ROT_ACCEL) * 100
-        steering_bar_color = (0, 0, 255) # Blue
-        tick_color = (0, 0, 0)  # Black for the tick
+        steering_bar_color = light_blue
+        tick_color = black
         steering_label = font.render("Steering", True, black)
         if steering <= 0:
             pygame.draw.rect(bg, steering_bar_color, (steering_bar_position[0], steering_bar_position[1], steering_percentage * steering_bar_width / 100, steering_bar_height))
@@ -264,7 +269,7 @@ class BlueBoat(object):
             pygame.draw.rect(bg, steering_bar_color, (steering_bar_position[0] + (steering_percentage) * steering_bar_width / 100, steering_bar_position[1], - steering_percentage * steering_bar_width / 100, steering_bar_height))
             # Display "steering" label on the right of the bar
             bg.blit(steering_label, (steering_bar_position[0] + 10, steering_bar_position[1]))
-            
+
         # Draw the tick as a vertical line
         pygame.draw.line(bg, tick_color, (steering_bar_position[0] + (clamped_steering_percentage) * steering_bar_width / 100,
                                             steering_bar_position[1]),
