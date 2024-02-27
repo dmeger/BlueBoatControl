@@ -69,24 +69,32 @@ def computeJoystickControl(throttle, steering):
 
 # CONTROLLER
 # Check for command-line argument specifying the controller type
-controller_type = "xbox"  # Default to Xbox controller
+controller_type = "keyboard"  # Default to Xbox controller
 if len(sys.argv) > 1:
     controller_type = sys.argv[1].lower()
 
 if controller_type == "xbox":
     THROTTLE_AXIS = 1
     STEERING_AXIS = 2
-    THROTTLE_MULTIPLIER = -1.0
-    STEERING_MULTIPLIER = -1.0
+    THROTTLE_MULTIPLIER = -1
+    STEERING_MULTIPLIER = -1
+    pygame.joystick.init() # initialize the joystick
+    joystick = pygame.joystick.Joystick(0) # create a joystick object
+    joystick.init() # initialize the joystick
     print("Using Xbox controller config.")
 elif controller_type == "ps4":
     THROTTLE_AXIS = 1
     STEERING_AXIS = 2
-    THROTTLE_MULTIPLIER = -1.0
-    STEERING_MULTIPLIER = -1.0
+    THROTTLE_MULTIPLIER = -1
+    STEERING_MULTIPLIER = -1
+    pygame.joystick.init() # initialize the joystick
+    joystick = pygame.joystick.Joystick(0) # create a joystick object
+    joystick.init() # initialize the joystick
     print("Using PS4 controller config.")
+elif controller_type == "keyboard":
+    print("Using keyboard config.")
 else:
-    print("Invalid controller type. Please use 'xbox' or 'ps4'.")
+    print("Invalid controller type. Please use 'keyboard', 'xbox' or 'ps4'.")
     sys.exit()
 
 
@@ -122,9 +130,6 @@ font = pygame.font.SysFont("Arial", 20)
 #BEFORE STARTING GUI
 pygame.init()
 pygame.display.set_caption("BlueBoat Control") # set the title of the window
-pygame.joystick.init() # initialize the joystick
-joystick = pygame.joystick.Joystick(0) # create a joystick object
-joystick.init() # initialize the joystick
 background = pygame.display.set_mode((screen_width, screen_height))
 #clock = pygame.time.Clock()
 boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
@@ -224,19 +229,25 @@ class BlueBoat(object):
         throttle_percentage = (throttle / FORWARD_MAX_LIN_ACCEL) * 100
         clamped_throttle_percentage = (clamped_throttle / FORWARD_MAX_LIN_ACCEL) * 100
         tick_color = (0, 0, 0)  # Black for the tick
+        throttle_label = font.render("Throttle", True, black)
         if throttle >= 0:
             throttle_bar_color = (0, 255, 0)  # Green for forward
             pygame.draw.rect(bg, throttle_bar_color, (throttle_bar_position[0], throttle_bar_position[1], throttle_percentage * throttle_bar_width / 100, throttle_bar_height))
+            # Display "throttle" label on the left of the bar
+            bg.blit(throttle_label, (throttle_bar_position[0] - 100, throttle_bar_position[1]))
         else:
             throttle_bar_color = (255, 0, 0) # Red for reverse
             pygame.draw.rect(bg, throttle_bar_color, (throttle_bar_position[0] + (throttle_percentage) * throttle_bar_width / 100, throttle_bar_position[1], - throttle_percentage * throttle_bar_width / 100, throttle_bar_height))
-        
+            # Display "throttle" label on the right of the bar
+            bg.blit(throttle_label, (throttle_bar_position[0] + 10, throttle_bar_position[1]))
         # Draw the tick as a vertical line
         pygame.draw.line(bg, tick_color, (throttle_bar_position[0] + (clamped_throttle_percentage) * throttle_bar_width / 100,
                                             throttle_bar_position[1]),
                                             (throttle_bar_position[0] + (clamped_throttle_percentage) * throttle_bar_width / 100,
                                             throttle_bar_position[1] + throttle_bar_height),
                                             2)
+        
+        
             
 
     def draw_steering_bar(self, bg, steering, clamped_steering):
@@ -244,11 +255,16 @@ class BlueBoat(object):
         clamped_steering_percentage = (-clamped_steering / MAX_ROT_ACCEL) * 100
         steering_bar_color = (0, 0, 255) # Blue
         tick_color = (0, 0, 0)  # Black for the tick
+        steering_label = font.render("Steering", True, black)
         if steering <= 0:
             pygame.draw.rect(bg, steering_bar_color, (steering_bar_position[0], steering_bar_position[1], steering_percentage * steering_bar_width / 100, steering_bar_height))
+            # Display "steering" label on the left of the bar
+            bg.blit(steering_label, (steering_bar_position[0] - 100, steering_bar_position[1]))
         else:
             pygame.draw.rect(bg, steering_bar_color, (steering_bar_position[0] + (steering_percentage) * steering_bar_width / 100, steering_bar_position[1], - steering_percentage * steering_bar_width / 100, steering_bar_height))
-        
+            # Display "steering" label on the right of the bar
+            bg.blit(steering_label, (steering_bar_position[0] + 10, steering_bar_position[1]))
+            
         # Draw the tick as a vertical line
         pygame.draw.line(bg, tick_color, (steering_bar_position[0] + (clamped_steering_percentage) * steering_bar_width / 100,
                                             steering_bar_position[1]),
@@ -395,8 +411,9 @@ while not Done:
 
     if not Pause:
         #print(control)
-        clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
-        control = [clamped_throttle, clamped_steering]
+        if throttle != 0 or steering != 0:
+            clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+            control = [clamped_throttle, clamped_steering]
         #control = computeControl( state )  # This is the call to the code you write
         state = boat.step(control)
         #print(state)
