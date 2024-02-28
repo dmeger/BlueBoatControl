@@ -43,6 +43,58 @@ def computeControl( x ):
 
     return control
 
+def computePIDControl(state, goalWP, linear_integral, angular_integral, previous_linear_error, previous_angular_error):
+    # PID control
+    Kp_lin = 10
+    Ki_lin = 0.01
+    Kd_lin = 30
+    Kp_ang = 20
+    Ki_ang = 0.01
+    Kd_ang = 60
+    # compute linear error as the euclidean distance between the boat and the goal
+    linear_error = np.linalg.norm(goalWP - state[0:2])
+    # print("linear_error: ", linear_error)
+    # compute angular error as the difference between the angle of the line from the boat to the goal, and the current boat angle
+    angular_error = - math.atan2(goal[1] - state[1], goal[0] - state[0]) - state[2]
+    # make sure the angular error is between -pi and pi
+    while angular_error > np.pi:
+        angular_error = angular_error - 2*np.pi
+    while angular_error < -np.pi:
+        angular_error = angular_error + 2*np.pi
+    # compute the integral of the linear and angular errors
+    linear_integral += linear_error
+    angular_integral += angular_error
+    # anti-windup
+    MAX_INTEGRAL_VALUE = 10
+    if linear_integral > MAX_INTEGRAL_VALUE:
+        linear_integral = MAX_INTEGRAL_VALUE
+    if linear_integral < -MAX_INTEGRAL_VALUE:
+        linear_integral = -MAX_INTEGRAL_VALUE
+    if angular_integral > MAX_INTEGRAL_VALUE:
+        angular_integral = MAX_INTEGRAL_VALUE
+    if angular_integral < -MAX_INTEGRAL_VALUE:
+        angular_integral = -MAX_INTEGRAL_VALUE
+    # compute the derivative of the linear and angular errors
+    linear_derivative = linear_error - previous_linear_error
+    angular_derivative = angular_error - previous_angular_error
+    # compute the linear and angular control inputs
+    linear_control = (Kp_lin * linear_error + Ki_lin * linear_integral + Kd_lin * linear_derivative) * pow(1 - abs(angular_error / np.pi), 4) # the linear control is multiplied by 1 - abs(angular_error / np.pi) to reduce the linear control when the angular error is large
+    angular_control = Kp_ang * angular_error + Ki_ang * angular_integral + Kd_ang * angular_derivative
+    # store the current linear and angular errors for the next iteration
+    previous_linear_error = linear_error
+    previous_angular_error = angular_error
+    # return the linear and angular control inputs
+    control = [linear_control, angular_control]
+    # print("control: ", control)
+    return control, linear_integral, angular_integral, previous_linear_error, previous_angular_error
+
+def waypointReached(state, goalWP, current_waypoint_index):
+    # If the boat is within a certain distance of the current waypoint, move on to the next waypoint
+    if np.linalg.norm(goalWP - state[0:2]) < 0.8:
+        print("Waypoint ", current_waypoint_index, " reached.")
+        current_waypoint_index += 1
+    return current_waypoint_index
+
 def computeJoystickControl(throttle, steering):
      # Update driving mode based on user input
     if abs(throttle) < THROTTLE_THRESHOLD:   # If throttle is not applied 
@@ -104,7 +156,8 @@ screen_width, screen_height = 800, 800   # set the width and height of the windo
 Done = False                # if True,out of while loop, and close pygame
 Pause = False               # when True, freeze the boat. This is 
                             # for debugging purposes
- 
+Auto_Control = False        # when True, the boat will follow the spiral path
+                            # when False, the boat will be controlled by the user
 #COLORS
 white = (255,255,255)
 black = (0,0,0)
@@ -117,6 +170,7 @@ light_red = (255, 182, 193)
 light_green = (144, 238, 144)
 radius = 20
 coord_to_screen_scaling = 100.0
+screen_center = (screen_width // 2, screen_height // 2)
 boat_img_size = (100,49)
 trailer_img_size = (300,125)
 trailer_pos = (400,100)
@@ -139,6 +193,24 @@ background = pygame.display.set_mode((screen_width, screen_height))
 #clock = pygame.time.Clock()
 boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
 trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
+
+# Draw a path for the boat to follow
+def draw_spiral():
+    spiral_points = []
+
+    x = screen_center[0] 
+    y = screen_center[1] 
+    spiral_points.append((int(x), int(y)))
+    spacing_factor = 8  # Adjust the spacing factor as needed
+    for t in np.arange(6 * np.pi, 15.5 * np.pi, 0.1):  # Adjust the range and step size as needed
+        x = screen_center[0] + spacing_factor * t * np.cos(t)
+        y = screen_center[1] + spacing_factor * t * np.sin(t)
+        spiral_points.append((int(x), int(y)))
+
+    return spiral_points
+    
+def from_screen(waypoint):
+    return (waypoint[0] - screen_width/2)/coord_to_screen_scaling, (waypoint[1] - screen_height/2)/coord_to_screen_scaling
 
 # A simple class to simulate BlueBoat physics using an ODE solver
 class BlueBoat(object):
@@ -341,12 +413,15 @@ def grid():
 def redraw(): 
     background.fill(white)
     grid()
+    if Auto_Control and current_waypoint_index < len(spiral_points) - 1:
+        pygame.draw.lines(background, red, False, spiral_points[current_waypoint_index:], 2) # draw the path from the start of the spiral to current_waypoint_index
     boat.draw(background)
     boat.draw_throttle_bar(background, throttle, clamped_throttle)
     boat.draw_steering_bar(background, steering, clamped_steering)
     boat.display_driving_mode(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
+
     pygame.display.update()
         # Flip the display
     pygame.display.flip()
@@ -358,6 +433,7 @@ boat = BlueBoat(x0)
 print(boat)
 state = boat.get_state()
 print(state)
+spiral_points = draw_spiral()
 
 FORWARD_MIN_LIN_ACCEL = 6.0
 FORWARD_MAX_LIN_ACCEL = 16.0
@@ -369,6 +445,11 @@ THROTTLE_THRESHOLD = 2.0
 LINACCEL_INCR = 4.0
 ROTACCEL_INCR = 2.0
 control = [0,0]
+current_waypoint_index = 0
+linear_integral = 0
+angular_integral = 0
+previous_linear_error = 0
+previous_angular_error = 0
 
 # Define driving modes
 NEUTRAL = "neutral"
@@ -395,6 +476,8 @@ while not Done:
                 boat.reset()
             if event.key == pygame.K_p:     # holding "p" key freezes time
                 Pause = True
+            if event.key == pygame.K_a:     # "a" key toggles auto control
+                Auto_Control = not Auto_Control
             if event.key == pygame.K_UP:
                 control[0] = control[0]+LINACCEL_INCR
             if event.key == pygame.K_DOWN:
@@ -419,6 +502,15 @@ while not Done:
         if throttle != 0 or steering != 0:
             clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
             control = [clamped_throttle, clamped_steering]
+        # use computePIDControl to compute the control input
+        if Auto_Control:
+            if current_waypoint_index < len(spiral_points) - 1:
+                goal = from_screen(spiral_points[current_waypoint_index])
+                control, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
+                current_waypoint_index = waypointReached( state, goal, current_waypoint_index)
+            else: # draw spiral again
+                spiral_points = draw_spiral()
+                current_waypoint_index = 0
         #control = computeControl( state )  # This is the call to the code you write
         state = boat.step(control)
         #print(state)
