@@ -84,9 +84,7 @@ def computePIDControl(state, goalWP, linear_integral, angular_integral, previous
     previous_linear_error = linear_error
     previous_angular_error = angular_error
     # return the linear and angular control inputs
-    control = [linear_control, angular_control]
-    # print("control: ", control)
-    return control, linear_integral, angular_integral, previous_linear_error, previous_angular_error
+    return linear_control, angular_control, linear_integral, angular_integral, previous_linear_error, previous_angular_error
 
 def waypointReached(state, goalWP, current_waypoint_index):
     # If the boat is within a certain distance of the current waypoint, move on to the next waypoint
@@ -100,7 +98,7 @@ def computeJoystickControl(throttle, steering):
     if abs(throttle) < THROTTLE_THRESHOLD:   # If throttle is not applied 
         current_mode = NEUTRAL
         clamped_throttle = 0
-        clamped_steering = steering
+        clamped_steering = min(MAX_ROT_ACCEL, max(-MAX_ROT_ACCEL, steering)) # Clamp steering to valid range
     elif throttle > 0:          # If throttle is positive
         current_mode = FORWARD
         clamped_throttle = min(FORWARD_MAX_LIN_ACCEL, max(FORWARD_MIN_LIN_ACCEL, throttle)) # Clamp throttle to valid range
@@ -158,6 +156,8 @@ Pause = False               # when True, freeze the boat. This is
                             # for debugging purposes
 Auto_Control = False        # when True, the boat will follow the spiral path
                             # when False, the boat will be controlled by the user
+Continuous_Control = False  # when True, the boat will be controlled continuously in Auto_Control mode
+                            # when False, the boat will be controlled discretely in Auto_Control mode
 #COLORS
 white = (255,255,255)
 black = (0,0,0)
@@ -455,6 +455,7 @@ previous_angular_error = 0
 NEUTRAL = "neutral"
 FORWARD = "forward"
 REVERSE = "reverse"
+CONTINUOUS = "continuous"
 
 # Initialize variables
 current_mode = NEUTRAL
@@ -470,14 +471,16 @@ while not Done:
     #if False:
         if event.type == pygame.QUIT:                    
             Done = True                                   
-        if event.type == pygame.KEYDOWN:    # keyboard control
-            if event.key == pygame.K_r:     # "r" key resets the simulator
+        if event.type == pygame.KEYDOWN:        # keyboard control
+            if event.key == pygame.K_r:         # "r" key resets the simulator
                 control = [0,0]
                 boat.reset()
-            if event.key == pygame.K_p:     # holding "p" key freezes time
+            if event.key == pygame.K_p:         # holding "p" key freezes time
                 Pause = True
-            if event.key == pygame.K_a:     # "a" key toggles auto control
+            if event.key == pygame.K_a:         # "a" key toggles auto control
                 Auto_Control = not Auto_Control
+            if event.key == pygame.K_c:         # holding "c" key enables continuous control
+                Continuous_Control = True
             if event.key == pygame.K_UP:
                 control[0] = control[0]+LINACCEL_INCR
             if event.key == pygame.K_DOWN:
@@ -488,29 +491,37 @@ while not Done:
                 control[1] = control[1]+ROTACCEL_INCR    
             if event.key == pygame.K_q:
                 Done = True
-        if event.type == pygame.KEYUP:      # releasing "p" makes us live again
+        if event.type == pygame.KEYUP:          # releasing "p" makes us live again
             if event.key == pygame.K_p:
                 Pause = False
-        if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
-            if event.axis == THROTTLE_AXIS:  # Left stick vertical axis = throttle
+            if event.key == pygame.K_c:         # releasing "c" key disables continuous control
+                Continuous_Control = False
+        if event.type == pygame.JOYAXISMOTION:  # xbox joystick controller control
+            if event.axis == THROTTLE_AXIS:     # Left stick vertical axis = throttle
                 throttle = FORWARD_MAX_LIN_ACCEL * joystick.get_axis(THROTTLE_AXIS) * THROTTLE_MULTIPLIER
-            if event.axis == STEERING_AXIS:  # Right stick horizontal axis = steering 
+            if event.axis == STEERING_AXIS:     # Right stick horizontal axis = steering 
                 steering = MAX_ROT_ACCEL * joystick.get_axis(STEERING_AXIS) * STEERING_MULTIPLIER
 
     if not Pause:
         #print(control)
-        if throttle != 0 or steering != 0:
-            clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
-            control = [clamped_throttle, clamped_steering]
         # use computePIDControl to compute the control input
         if Auto_Control:
             if current_waypoint_index < len(spiral_points) - 1:
                 goal = from_screen(spiral_points[current_waypoint_index])
-                control, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
+                throttle, steering, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
+                if Continuous_Control:
+                    clamped_throttle, clamped_steering = throttle, steering
+                    current_mode = CONTINUOUS
+                else:
+                    clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+                control = [clamped_throttle, clamped_steering]
                 current_waypoint_index = waypointReached( state, goal, current_waypoint_index)
             else: # draw spiral again
                 spiral_points = draw_spiral()
                 current_waypoint_index = 0
+        elif throttle != 0 or steering != 0:
+            clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+            control = [clamped_throttle, clamped_steering]
         #control = computeControl( state )  # This is the call to the code you write
         state = boat.step(control)
         #print(state)
