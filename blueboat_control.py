@@ -182,7 +182,7 @@ throttle_bar_position = (screen_width // 2 - throttle_bar_width // 2, 700)
 steering_bar_width = 200
 steering_bar_height = 20
 steering_bar_position = (screen_width // 2 - steering_bar_width // 2, 750)
-
+driving_mode_position = (screen_width // 2 - steering_bar_width // 2, 650)
 
 # FONT
 pygame.font.init()
@@ -363,9 +363,21 @@ class BlueBoat(object):
         #pygame.draw.rect(bg,black,pygame.Rect(self.to_screen(self.TRAILER_LEFT_X,self.TRAILER_LEFT_Y),(self.TRAILER_HEIGHT*coord_to_screen_scaling,self.TRAILER_WIDTH*coord_to_screen_scaling)))
 
     def display_driving_mode(self, bg):
-        mode_text = font.render(f"Mode: {current_mode.capitalize()}", True, black)
-        bg.blit(mode_text, (10, 10))
-    
+        # Display mode text in different colors based on the mode. Green background for forward, red background for reverse, blue background for neutral, black background for continuous, white background for undefined
+        if current_mode == FORWARD:
+            mode_text = font.render(current_mode, True, black, light_green)
+        elif current_mode == REVERSE:
+            mode_text = font.render(current_mode, True, black, light_red)
+        elif current_mode == NEUTRAL:
+            mode_text = font.render(current_mode, True, black, light_blue)
+        elif current_mode == CONTINUOUS:
+            mode_text = font.render(current_mode, True, white, black)
+        elif current_mode == UNDEFINED:
+            mode_text = font.render(current_mode, True, black, white)
+        else:
+            mode_text = font.render("Invalid mode", True, black, white)
+        bg.blit(mode_text, driving_mode_position)
+
     def draw_throttle_bar(self, bg, throttle, clamped_throttle):
         throttle_percentage = (throttle / FORWARD_MAX_LIN_ACCEL) * 100
         clamped_throttle_percentage = (clamped_throttle / FORWARD_MAX_LIN_ACCEL) * 100
@@ -493,11 +505,11 @@ def redraw():
     pygame.display.flip()
 
 # Define driving modes
-NEUTRAL = "neutral"
-FORWARD = "forward"
-REVERSE = "reverse"
-CONTINUOUS = "continuous"
-UNDEFINED = "undefined"
+NEUTRAL = "NEUTRAL"
+FORWARD = "FORWARD"
+REVERSE = "REVERSE"
+CONTINUOUS = "CONTINUOUS"
+UNDEFINED = "UNDEFINED"
 
 # Initialize variables
 current_mode = NEUTRAL
