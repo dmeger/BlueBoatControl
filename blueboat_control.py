@@ -50,17 +50,14 @@ def computePIDControl(state, goalWP, linear_integral, angular_integral, previous
     Kd_lin = 30
     Kp_ang = 20
     Ki_ang = 0.01
-    Kd_ang = 60
+    Kd_ang = 80
     # compute linear error as the euclidean distance between the boat and the goal
     linear_error = np.linalg.norm(goalWP - state[0:2])
     # print("linear_error: ", linear_error)
     # compute angular error as the difference between the angle of the line from the boat to the goal, and the current boat angle
     angular_error = - math.atan2(goal[1] - state[1], goal[0] - state[0]) - state[2]
     # make sure the angular error is between -pi and pi
-    while angular_error > np.pi:
-        angular_error = angular_error - 2*np.pi
-    while angular_error < -np.pi:
-        angular_error = angular_error + 2*np.pi
+    angular_error = minangle(angular_error)
     # compute the integral of the linear and angular errors
     linear_integral += linear_error
     angular_integral += angular_error
@@ -170,6 +167,7 @@ Dark_red = (150, 0, 0)
 light_blue = (173, 216, 230)
 light_red = (255, 182, 193)
 light_green = (144, 238, 144)
+light_grey = (150, 150, 150)
 radius = 20
 coord_to_screen_scaling = 100.0
 screen_center = (screen_width // 2, screen_height // 2)
@@ -275,6 +273,13 @@ def draw_large_slalom():
 
 def from_screen(waypoint):
     return (waypoint[0] - screen_width/2)/coord_to_screen_scaling, (waypoint[1] - screen_height/2)/coord_to_screen_scaling
+
+def minangle(theta):
+    while theta > np.pi:
+        theta = theta - 2*np.pi
+    while theta < -np.pi:
+        theta = theta + 2*np.pi
+    return theta
 
 # A simple class to simulate BlueBoat physics using an ODE solver
 class BlueBoat(object):
@@ -424,12 +429,15 @@ class BlueBoat(object):
                                             (steering_bar_position[0] + (clamped_steering_percentage) * steering_bar_width / 100,
                                             steering_bar_position[1] + steering_bar_height),
                                             2)
+        
+    def add_to_path_history(self, x, y):
+        path_history.append((x, y))
+        if(len(path_history) > 2000):
+            path_history.pop(0)
 
-    def minangle(theta):
-        while theta > np.pi:
-            theta = theta - 2*np.pi
-        while theta < -np.pi:
-            theta = theta + 2*np.pi
+    def display_path_history(self, bg):
+        for i in range(len(path_history) - 1):
+            pygame.draw.line(bg, light_grey, self.to_screen(path_history[i][0], path_history[i][1]), self.to_screen(path_history[i + 1][0], path_history[i + 1][1]), 2)
 
     # These equations are simply typed in from the dynamics 
     # on the assignment document. They have been derived 
@@ -497,6 +505,7 @@ def redraw():
     boat.draw_throttle_bar(background, throttle, clamped_throttle)
     boat.draw_steering_bar(background, steering, clamped_steering)
     boat.display_driving_mode(background)
+    boat.display_path_history(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
 
@@ -518,6 +527,7 @@ throttle = 0
 steering = 0
 clamped_throttle = 0
 clamped_steering = 0
+path_history = []
 
 # Starting here is effectively the main function.
 # It's a simple GUI drawing loop that calls to your code to compute the control, sets it to the 
@@ -555,6 +565,7 @@ while not Done:
         if event.type == pygame.KEYDOWN:        # keyboard control
             if event.key == pygame.K_r:         # "r" key resets the simulator
                 control = [0,0]
+                path_history = []
                 boat.reset()
             if event.key == pygame.K_p:         # holding "p" key freezes time
                 Pause = True
@@ -567,22 +578,27 @@ while not Done:
                 auto_path_mode = 0
                 path_waypoints = draw_path(auto_path_mode)
                 current_waypoint_index = 0
+                path_history = []
             if event.key == pygame.K_2:
                 auto_path_mode = 1
                 path_waypoints = draw_path(auto_path_mode)
                 current_waypoint_index = 0
+                path_history = []
             if event.key == pygame.K_3:
                 auto_path_mode = 2
                 path_waypoints = draw_path(auto_path_mode)
                 current_waypoint_index = 0
+                path_history = []
             if event.key == pygame.K_4:
                 auto_path_mode = 3
                 path_waypoints = draw_path(auto_path_mode)
                 current_waypoint_index = 0
+                path_history = []
             if event.key == pygame.K_5:
                 auto_path_mode = 4
                 path_waypoints = draw_path(auto_path_mode)
                 current_waypoint_index = 0
+                path_history = []
             if event.key == pygame.K_UP:
                 control[0] = control[0]+LINACCEL_INCR
             if event.key == pygame.K_DOWN:
@@ -621,11 +637,13 @@ while not Done:
             else: # draw spiral again
                 path_waypoints = draw_path(auto_path_mode)
                 current_waypoint_index = 0
+                path_history = []
         elif throttle != 0 or steering != 0:
             clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
             control = [clamped_throttle, clamped_steering]
         #control = computeControl( state )  # This is the call to the code you write
         state = boat.step(control)
+        boat.add_to_path_history(state[0], state[1])
         #print(state)
 
     redraw()
