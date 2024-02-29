@@ -159,6 +159,11 @@ class BlueBoat(gym.Env):
         self.TRAILER_WIDTH = 0.1
         self.joystick=0
         
+        pygame.init()
+        pygame.display.set_caption("BlueBoat Control") # set the title of the window  
+        self.background = pygame.display.set_mode((self.screen_width, self.screen_height))
+        self.boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), self.boat_img_size)
+        self.trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), self.trailer_img_size)
         self.model = model
         if model is None:
             self.model = BlueBoatModel(self.X0)
@@ -167,7 +172,7 @@ class BlueBoat(gym.Env):
         self.tpos = np.asarray(self.trailer_pos)
         # self.reward_f = BlueBoatReward()
         
-        high = np.array([128, 128], dtype=np.float32)
+        high = np.array([16, 16], dtype=np.float32)
         self.action_space = spaces.Box(-high, high, dtype=np.float32)     
         # observation space is the combination of state, action, and trailer position 
         self.observation_space = spaces.Dict(
@@ -222,7 +227,7 @@ class BlueBoat(gym.Env):
         return (int(self.screen_width/2+x*self.coord_to_screen_scaling),
                 int(self.screen_height/2+y*self.coord_to_screen_scaling))
 
-    def blitRotate(self,surf, image, pos, originPos, angle):
+    def blitRotate(self, surf, image, pos, originPos, angle):
 
         # offset from pivot to center
         image_rect = image.get_rect(topleft = (pos[0] - originPos[0], pos[1]-originPos[1]))
@@ -287,58 +292,52 @@ class BlueBoat(gym.Env):
     def render(self):
         # pygame.init()
         # pygame.display.set_caption("BlueBoat Control") # set the title of the window
-        # background = pygame.display.set_mode((screen_width, screen_height))
+        # background = pygame.display.set_mode((self.screen_width, self.screen_height))
         #clock = pygame.time.Clock()
         # boat_img = pygame.transform.smoothscale( pygame.image.load("../img/bb.png").convert_alpha(), boat_img_size)
         # trailer_img = pygame.transform.smoothscale( pygame.image.load("../img/trailer.png").convert_alpha(), trailer_img_size)
-        pygame.init()
-        pygame.display.set_caption("BlueBoat Control") # set the title of the window
-        background = pygame.display.set_mode((self.screen_width, self.screen_height))
-        boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), self.boat_img_size)
-        trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), self.trailer_img_size)
+        # pygame.init()
+        # pygame.display.set_caption("BlueBoat Control") # set the title of the window
         
-        while not self.Done:
+        # while not self.Done:
             #clock.tick(30)             # GUI refresh rate
                              
-            for event in pygame.event.get():
-            #if False:
-                if event.type == pygame.QUIT:                    
-                    self.Done = True                                   
-                if event.type == pygame.KEYDOWN:    # keyboard control
-                    if event.key == pygame.K_r:     # "r" key resets the simulator
-                        self.control = [0,0]
-                        # boat.reset()
-                        self.reset()
-                    if event.key == pygame.K_p:     # holding "p" key freezes time
-                        self.Pause = True
-                    if event.key == pygame.K_UP:
-                        self.control[0] = self.control[0]+self.LINACCEL
-                    if event.key == pygame.K_DOWN:
-                        self.control[0] = self.control[0]-self.LINACCEL
-                    if event.key == pygame.K_RIGHT:
-                        self.control[1] = self.control[1]-self.ROTACCEL
-                    if event.key == pygame.K_LEFT:
-                        self.control[1] = self.control[1]+self.ROTACCEL    
-                    if event.key == pygame.K_q:
-                        self.Done = True
-                if event.type == pygame.KEYUP:      # releasing "p" makes us live again
-                    if event.key == pygame.K_p:
-                        self.Pause = False
-                if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
-                    if event.axis == 1:  # Left stick vertical axis = throttle
-                        self.control[0] = self.JOY_MAX_LIN_ACCEL * -self.joystick.get_axis(1)
-                    if event.axis == 2:  # Right stick horizontal axis = steering 
-                        self.control[1] = self.JOY_MAX_ROT_ACCEL * -self.joystick.get_axis(2)
-                    
-            if not self.Pause:
-                #print(control)
-                #control = computeControl( state )  # This is the call to the code you write
-                # state = boat.step(control)
-                obs, r, done, state = self.step(self.control)
+        for event in pygame.event.get():
+        #if False:
+            if event.type == pygame.QUIT:                    
+                self.Done = True                                   
+            if event.type == pygame.KEYDOWN:    # keyboard control
+                if event.key == pygame.K_r:     # "r" key resets the simulator
+                    self.control = [0,0]
+                    # boat.reset()
+                    self.reset()
+                if event.key == pygame.K_p:     # holding "p" key freezes time
+                    self.Pause = True
+                if event.key == pygame.K_UP:
+                    self.control[0] = self.control[0]+self.LINACCEL
+                if event.key == pygame.K_DOWN:
+                    self.control[0] = self.control[0]-self.LINACCEL
+                if event.key == pygame.K_RIGHT:
+                    self.control[1] = self.control[1]-self.ROTACCEL
+                if event.key == pygame.K_LEFT:
+                    self.control[1] = self.control[1]+self.ROTACCEL    
+                if event.key == pygame.K_q:
+                    self.Done = True
+            if event.type == pygame.KEYUP:      # releasing "p" makes us live again
+                if event.key == pygame.K_p:
+                    self.Pause = False
+            if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
+                if event.axis == 1:  # Left stick vertical axis = throttle
+                    self.control[0] = self.JOY_MAX_LIN_ACCEL * -self.joystick.get_axis(1)
+                if event.axis == 2:  # Right stick horizontal axis = steering 
+                    self.control[1] = self.JOY_MAX_ROT_ACCEL * -self.joystick.get_axis(2)
+                
+        # if not self.Pause:
+            # obs, r, done, trun, state = self.step(self.control)
 
-            self.redraw(background, boat_img, trailer_img)
+        self.redraw(self.background, self.boat_img, self.trailer_img)
          
-        pygame.quit()
+        # pygame.quit()
 
     def minangle(theta):
         while theta > np.pi:
@@ -382,8 +381,15 @@ class BlueBoat(gym.Env):
         if dt is None:
             dt = 0.005
         t1 = self.solver.t + dt
+        upper_t = 10.0
         while self.solver.successful and self.solver.t < t1:
+        # while self.solver.successful and self.solver.t < t1 and self.solver.t < upper_t:
             self.solver.integrate(self.solver.t+ dt)
+            
+            # print("self.solver.t: ", self.solver.t)
+            # print("t1: ", t1)
+            # print("\n")
+            
         self.x = np.array(self.solver.y)
         self.t = self.solver.t
         
@@ -392,8 +398,9 @@ class BlueBoat(gym.Env):
         done = False
         if abs(1-reward) <= 0.2:
             done = True
+        truncated = False
         info = {"x": self.x, "t": self.t}
-        return observation, reward, done, info
+        return observation, reward, done, truncated, info
 
 
 # =============================================================================
