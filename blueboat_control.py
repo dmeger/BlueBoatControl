@@ -78,7 +78,7 @@ def computePIDControl(state, goalWP, linear_integral, angular_integral, previous
     linear_derivative = linear_error - previous_linear_error
     angular_derivative = angular_error - previous_angular_error
     # compute the linear and angular control inputs
-    linear_control = (Kp_lin * linear_error + Ki_lin * linear_integral + Kd_lin * linear_derivative) * pow(1 - abs(angular_error / np.pi), 4) # the linear control is multiplied by 1 - abs(angular_error / np.pi) to reduce the linear control when the angular error is large
+    linear_control = (Kp_lin * linear_error + Ki_lin * linear_integral + Kd_lin * linear_derivative) * pow(1 - abs(angular_error / np.pi), 8) # the linear control is multiplied by 1 - abs(angular_error / np.pi) to reduce the linear control when the angular error is large
     angular_control = Kp_ang * angular_error + Ki_ang * angular_integral + Kd_ang * angular_derivative
     # store the current linear and angular errors for the next iteration
     previous_linear_error = linear_error
@@ -88,7 +88,7 @@ def computePIDControl(state, goalWP, linear_integral, angular_integral, previous
 
 def waypointReached(state, goalWP, current_waypoint_index):
     # If the boat is within a certain distance of the current waypoint, move on to the next waypoint
-    if np.linalg.norm(goalWP - state[0:2]) < 0.8:
+    if np.linalg.norm(goalWP - state[0:2]) < 0.75:
         print("Waypoint ", current_waypoint_index, " reached.")
         current_waypoint_index += 1
     return current_waypoint_index
@@ -111,6 +111,8 @@ def computeJoystickControl(throttle, steering):
         clamped_throttle_ratio = (- clamped_throttle / REVERSE_MAX_LIN_ACCEL)
         # TODO clamp steering to valid range (thrust vector must be between -25 and 25 degrees, --> it depends on throttle)
         clamped_steering = min(MAX_ROT_ACCEL * clamped_throttle_ratio, max(-MAX_ROT_ACCEL * clamped_throttle_ratio, steering))
+    else:
+        current_mode = UNDEFINED
     return clamped_throttle, clamped_steering, current_mode
 
 # After this is all the code to run the BlueBoat physics, draw it on the screen, etc. 
@@ -194,7 +196,23 @@ background = pygame.display.set_mode((screen_width, screen_height))
 boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
 trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
 
-# Draw a path for the boat to follow
+def draw_path(mode):
+    match mode:
+        case 0:
+            return draw_spiral()
+        case 1:
+            return draw_spikes_coverage()
+        case 2:
+            return draw_square_coverage()
+        case 3:
+            return draw_slalom()
+        case 4:
+            return draw_large_slalom()
+        case _:
+            print("Invalid mode. Please use a number between 0 and 4.")
+            return draw_spiral()
+        
+# Draw a spiral path for the boat to follow
 def draw_spiral():
     spiral_points = []
 
@@ -208,7 +226,53 @@ def draw_spiral():
         spiral_points.append((int(x), int(y)))
 
     return spiral_points
-    
+
+# Draw a spikes coverage path for the boat to follow
+def draw_spikes_coverage():
+    coverage_points = []
+    border_spacing = 120
+    spacing = 120
+    for x in range(0 + border_spacing, screen_width - border_spacing, spacing):
+        for y in np.arange(0.0, 1.0, 0.1):
+            coverage_points.append((x + y * spacing / 2, border_spacing + y * (screen_height - 2 * border_spacing)))
+        for y in np.arange(0.0, 1.0, 0.1):
+            coverage_points.append((x + (1 + y) * spacing / 2, screen_height - border_spacing - y * (screen_height - 2 * border_spacing)))
+    return coverage_points
+
+# Draw a square coverage path for the boat to follow
+def draw_square_coverage():
+    coverage_points = []
+    border_spacing = 100
+    spacing = 200
+    for x in range(0 + border_spacing, screen_width - border_spacing, spacing):
+        for y in np.arange(0.0, 1.0, 0.1):
+            coverage_points.append((x, border_spacing + y * (screen_height - 2 * border_spacing)))
+        for y in np.arange(0.0, 1.0, 0.5):
+            coverage_points.append((x + y * spacing / 2, screen_height - border_spacing))
+        for y in np.arange(0.0, 1.0, 0.1):
+            coverage_points.append((x + spacing / 2, screen_height - border_spacing - y * (screen_height - 2 * border_spacing)))
+        for y in np.arange(0.0, 1.0, 0.5):
+            coverage_points.append((x + (1 + y) * spacing / 2, border_spacing))
+    return coverage_points
+
+# draw a slalom curve path for the boat to follow
+def draw_slalom():
+    slalom_points = []
+    border_spacing = 60
+    for x in range(0 + border_spacing, screen_width - border_spacing, 10):
+        y = screen_center[1] + (screen_height - 2 * border_spacing) / 6 * np.sin((x - border_spacing) * 6 * np.pi / screen_width)
+        slalom_points.append((x, y))
+    return slalom_points
+
+# draw a slalom curve path for the boat to follow
+def draw_large_slalom():
+    slalom_points = []
+    border_spacing = 60
+    for x in range(0 + border_spacing, screen_width - border_spacing, 10):
+        y = screen_center[1] + (screen_height - 2 * border_spacing) / 3 * np.sin((x - border_spacing) * 3 * np.pi / screen_width)
+        slalom_points.append((x, y))
+    return slalom_points
+
 def from_screen(waypoint):
     return (waypoint[0] - screen_width/2)/coord_to_screen_scaling, (waypoint[1] - screen_height/2)/coord_to_screen_scaling
 
@@ -413,8 +477,10 @@ def grid():
 def redraw(): 
     background.fill(white)
     grid()
-    if Auto_Control and current_waypoint_index < len(spiral_points) - 1:
-        pygame.draw.lines(background, red, False, spiral_points[current_waypoint_index:], 2) # draw the path from the start of the spiral to current_waypoint_index
+    if Auto_Control and current_waypoint_index < len(path_waypoints) - 1:
+        for waypoint in path_waypoints[current_waypoint_index:]:
+            pygame.draw.circle(background, black, waypoint, 3)
+        pygame.draw.lines(background, red, False, path_waypoints[current_waypoint_index:], 2) # draw the path from the start of the spiral to current_waypoint_index
     boat.draw(background)
     boat.draw_throttle_bar(background, throttle, clamped_throttle)
     boat.draw_steering_bar(background, steering, clamped_steering)
@@ -426,6 +492,21 @@ def redraw():
         # Flip the display
     pygame.display.flip()
 
+# Define driving modes
+NEUTRAL = "neutral"
+FORWARD = "forward"
+REVERSE = "reverse"
+CONTINUOUS = "continuous"
+UNDEFINED = "undefined"
+
+# Initialize variables
+current_mode = NEUTRAL
+auto_path_mode = 0
+throttle = 0
+steering = 0
+clamped_throttle = 0
+clamped_steering = 0
+
 # Starting here is effectively the main function.
 # It's a simple GUI drawing loop that calls to your code to compute the control, sets it to the 
 # BlueBoat class and loops the GUI to show what happened.
@@ -433,7 +514,7 @@ boat = BlueBoat(x0)
 print(boat)
 state = boat.get_state()
 print(state)
-spiral_points = draw_spiral()
+path_waypoints = draw_path(auto_path_mode)
 
 FORWARD_MIN_LIN_ACCEL = 6.0
 FORWARD_MAX_LIN_ACCEL = 16.0
@@ -451,18 +532,6 @@ angular_integral = 0
 previous_linear_error = 0
 previous_angular_error = 0
 
-# Define driving modes
-NEUTRAL = "neutral"
-FORWARD = "forward"
-REVERSE = "reverse"
-CONTINUOUS = "continuous"
-
-# Initialize variables
-current_mode = NEUTRAL
-throttle = 0
-steering = 0
-clamped_throttle = 0
-clamped_steering = 0
 
 while not Done:
     #clock.tick(30)             # GUI refresh rate
@@ -481,6 +550,27 @@ while not Done:
                 Auto_Control = not Auto_Control
             if event.key == pygame.K_c:         # holding "c" key enables continuous control
                 Continuous_Control = True
+            # set the auto path mode with numbers
+            if event.key == pygame.K_1:
+                auto_path_mode = 0
+                path_waypoints = draw_path(auto_path_mode)
+                current_waypoint_index = 0
+            if event.key == pygame.K_2:
+                auto_path_mode = 1
+                path_waypoints = draw_path(auto_path_mode)
+                current_waypoint_index = 0
+            if event.key == pygame.K_3:
+                auto_path_mode = 2
+                path_waypoints = draw_path(auto_path_mode)
+                current_waypoint_index = 0
+            if event.key == pygame.K_4:
+                auto_path_mode = 3
+                path_waypoints = draw_path(auto_path_mode)
+                current_waypoint_index = 0
+            if event.key == pygame.K_5:
+                auto_path_mode = 4
+                path_waypoints = draw_path(auto_path_mode)
+                current_waypoint_index = 0
             if event.key == pygame.K_UP:
                 control[0] = control[0]+LINACCEL_INCR
             if event.key == pygame.K_DOWN:
@@ -504,10 +594,10 @@ while not Done:
 
     if not Pause:
         #print(control)
-        # use computePIDControl to compute the control input
+        # use computePIDControl to compute the control input112
         if Auto_Control:
-            if current_waypoint_index < len(spiral_points) - 1:
-                goal = from_screen(spiral_points[current_waypoint_index])
+            if current_waypoint_index < len(path_waypoints) - 1:
+                goal = from_screen(path_waypoints[current_waypoint_index])
                 throttle, steering, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
                 if Continuous_Control:
                     clamped_throttle, clamped_steering = throttle, steering
@@ -517,7 +607,7 @@ while not Done:
                 control = [clamped_throttle, clamped_steering]
                 current_waypoint_index = waypointReached( state, goal, current_waypoint_index)
             else: # draw spiral again
-                spiral_points = draw_spiral()
+                path_waypoints = draw_path(auto_path_mode)
                 current_waypoint_index = 0
         elif throttle != 0 or steering != 0:
             clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
