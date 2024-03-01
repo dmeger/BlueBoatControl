@@ -1,6 +1,6 @@
-import gym
+import gymnasium as gym
 from .blueboat_env import BlueBoat
-from gym.envs.registration import register
+from gymnasium.envs.registration import register
 
 register(
     id='BlueBoat-v0',

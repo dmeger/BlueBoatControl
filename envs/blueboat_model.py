@@ -13,8 +13,8 @@ his teaching in RL and Robotics. Please use this freely for any purpose, but ack
 is always welcome.
 '''
 
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import pygame
 import math
 import numpy as np

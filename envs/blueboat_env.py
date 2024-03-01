@@ -13,8 +13,8 @@ his teaching in RL and Robotics. Please use this freely for any purpose, but ack
 is always welcome.
 '''
 
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import pygame
 import math
 import numpy as np
@@ -130,11 +130,11 @@ class BlueBoat(gym.Env):
         self.Done = False                # if True,out of while loop, and close pygame
         self.Pause = False               # when True, freeze the boat. This is 
         # self.X0 = self.x = np.array(x0,dtype=np.float64).flatten()
-        self.X0 = np.array(X0,dtype=np.float64).flatten()
+        self.X0 = np.array(X0,dtype=np.float32).flatten()
         self.x = self.X0
-        self.t = 0
-        self.x0 = [0,0,0,0,0,0]  
-        self.goal = np.array([ 0, 0, 0, np.pi ])
+        self.t = 0.0
+        self.x0 = np.array([0,0,0,0,0,0], dtype=np.float32)
+        self.goal = np.array([ 0, 0, 0, np.pi ], dtype=np.float32)
         self.screen_width = 800
         self.screen_height = 800
         self.white = (255,255,255)
@@ -150,14 +150,14 @@ class BlueBoat(gym.Env):
         self.JOY_MAX_LIN_ACCEL = 16.0
         self.ROTACCEL = 2.0
         self.JOY_MAX_ROT_ACCEL = 8.0
-        self.control = [0,0]
-        self.TRAILER_LEFT_X = 0
-        self.TRAILER_LEFT_Y = 0
-        self.TRAILER_RIGHT_X = 4
-        self.TRAILER_RIGHT_Y = 2
+        self.control = np.array([0.0,0.0], dtype=np.float32)
+        self.TRAILER_LEFT_X = 0.0
+        self.TRAILER_LEFT_Y = 0.0
+        self.TRAILER_RIGHT_X = 4.0
+        self.TRAILER_RIGHT_Y = 2.0
         self.TRAILER_HEIGHT = 0.2
         self.TRAILER_WIDTH = 0.1
-        self.joystick=0
+        self.joystick=0.0
         
         pygame.init()
         pygame.display.set_caption("BlueBoat Control") # set the title of the window  
@@ -168,21 +168,26 @@ class BlueBoat(gym.Env):
         if model is None:
             self.model = BlueBoatModel(self.X0)
         self.bpos = self.x[:2]
-        self.bpos = np.asarray(self.bpos)
-        self.tpos = np.asarray(self.trailer_pos)
+        self.bpos = np.asarray(self.bpos, dtype=np.float32)
+        self.tpos = np.asarray(self.trailer_pos, dtype=np.float32)
         # self.reward_f = BlueBoatReward()
         
-        high = np.array([16, 16], dtype=np.float32)
+        high = np.array([16.0, 16.0], dtype=np.float32)
         self.action_space = spaces.Box(-high, high, dtype=np.float32)     
         # observation space is the combination of state, action, and trailer position 
         self.observation_space = spaces.Dict(
-            {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(1, 6), dtype=np.float32),
-            "action": spaces.Box(-high, high, dtype=np.float32),
-            "target": spaces.Box(-self.screen_width, self.screen_width, shape=(1, 2), dtype=np.float32),
+            {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(6, ), dtype=np.float32),
+            "action": spaces.Box(-high, high, shape=(2, ), dtype=np.float32),
+            "target": spaces.Box(-self.screen_width, self.screen_width, shape=(2, ), dtype=np.float32),
             })
+        # self.observation_space = spaces.Dict(
+        #    {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(1, 6), dtype=np.float32),
+        #    "action": spaces.Box(-high, high, dtype=np.float32),
+        #    "target": spaces.Box(-self.screen_width, self.screen_width, shape=(1, 2), dtype=np.float32),
+        #    })
 
         # self.u = 0
-        self.u = [0,0]
+        self.u = np.array([0.0, 0.0], dtype=np.float32)
         # This is a key line that makes this class an accurate version of BlueBoat dynamics.
         # The ODE solver is connected with our instantaneous dynamics equations so it can do 
         # the hard work of computing the motion over time for us.
@@ -193,7 +198,7 @@ class BlueBoat(gym.Env):
     # with the variables used by our ODE solver.
     def set_state(self, x):
         if (self.x is None or np.linalg.norm(x-self.x) > 1e-12):
-            self.x = np.array(x,dtype=np.float64).flatten()
+            self.x = np.array(x,dtype=np.float32).flatten()
         self.solver = self.solver.set_initial_value(self.x)
         self.t = self.solver.t
         
@@ -201,8 +206,7 @@ class BlueBoat(gym.Env):
         return self.x
     
     def get_obs(self):
-        u = np.asarray(self.u)
-        return {"state": self.x, "action": u, "target": self.tpos}
+        return {"state": self.x, "action": self.u, "target": self.tpos}
     
     def get_reward(self):
         self.bpos = self.x[:2]
@@ -212,7 +216,9 @@ class BlueBoat(gym.Env):
 
     # Convenience function. Allows for quickly resetting back to the initial state to
     # get a clearer view of how the control works.
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        
         self.x = self.X0
         self.t = 0
         self.set_state(self.x)
@@ -220,8 +226,13 @@ class BlueBoat(gym.Env):
         obs = self.get_obs()
         state = self.get_state()
         reward = self.get_reward()
-        info = {"x": self.x, "t": self.t}
-        return obs, state, reward, info
+        info = {"state": self.x, "t": self.t, "reward": reward}
+        # return obs, state, reward, info
+        
+        # print(obs)
+        # print(info)
+        
+        return obs, info
 
     def to_screen(self,x,y):
         return (int(self.screen_width/2+x*self.coord_to_screen_scaling),
@@ -390,17 +401,20 @@ class BlueBoat(gym.Env):
             # print("t1: ", t1)
             # print("\n")
             
-        self.x = np.array(self.solver.y)
+        self.x = np.array(self.solver.y , dtype=np.float32)
         self.t = self.solver.t
         
         observation = self.get_obs()
         reward = self.get_reward()
+        reward = float(reward)
         done = False
         if abs(1-reward) <= 0.2:
             done = True
         truncated = False
         info = {"x": self.x, "t": self.t}
+        
         return observation, reward, done, truncated, info
+        #return observation, reward, done, info
 
 
 # =============================================================================
