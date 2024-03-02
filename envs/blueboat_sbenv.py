@@ -116,12 +116,12 @@ class BlueBoatReward(object):
         return reward
 
 # A simple class to simulate BlueBoat physics using an ODE solver
-class BlueBoat(gym.Env):
+class SBBlueBoat(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 40}
  
     # State holds x, x_dot, theta_dot, theta (radians)
     def __init__(self, model=None, X0=None):
-        super(BlueBoat, self).__init__()
+        super(SBBlueBoat, self).__init__()
         self.g = 9.82
         self.m = 0.5
         self.M = 0.5
@@ -170,19 +170,19 @@ class BlueBoat(gym.Env):
         self.bpos = self.x[:2]
         self.bpos = np.asarray(self.bpos, dtype=np.float32)
         self.tpos = np.asarray(self.trailer_pos, dtype=np.float32)
-        self.initial_dist = np.linalg.norm((self.bpos-self.tpos), ord=2)
+        self.initial_dist = np.linalg.norm((self.bpos - self.tpos), ord=2)
         # self.reward_f = BlueBoatReward()
         
         high = np.array([16.0, 16.0], dtype=np.float32)
         self.action_space = spaces.Box(-high, high, dtype=np.float32)     
         # observation space is the combination of state, action, and trailer position 
-        self.observation_space = spaces.Dict(
-            {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(6, ), dtype=np.float32),
-            "action": spaces.Box(-high, high, shape=(2, ), dtype=np.float32),
-            "target": spaces.Box(-self.screen_width, self.screen_width, shape=(2, ), dtype=np.float32),
-            })
         # self.observation_space = spaces.Dict(
-        #    {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(6, ), dtype=np.float32)})
+        #    {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(6, ), dtype=np.float32),
+        #    "action": spaces.Box(-high, high, shape=(2, ), dtype=np.float32),
+        #    "target": spaces.Box(-self.screen_width, self.screen_width, shape=(2, ), dtype=np.float32),
+        #    })
+        self.observation_space = spaces.Dict(
+            {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(6, ), dtype=np.float32)})
 
         # self.u = 0
         self.u = np.array([0.0, 0.0], dtype=np.float32)
@@ -243,7 +243,7 @@ class BlueBoat(gym.Env):
         # print(obs)
         # print(info)
         
-        return obs, info
+        return ({"state": self.x}, self.u)
 
     def to_screen(self,x,y):
         return (int(self.screen_width/2+x*self.coord_to_screen_scaling),
@@ -424,8 +424,8 @@ class BlueBoat(gym.Env):
         truncated = False
         info = {"x": self.x, "t": self.t}
         
-        # return ({"state": self.x}, reward, done, truncated, {"action": self.u})
-        return observation, reward, done, truncated, info
+        return ({"state": self.x}, reward, done, truncated, {"action": self.u})
+        #return observation, reward, done, info
 
 
 # =============================================================================

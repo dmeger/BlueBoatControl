@@ -20,7 +20,7 @@ while True:
     action = env.action_space.sample()
     obs, reward, done, _, _= env.step(action)
     env.render()
-    # print("reward:", reward)
+    print("reward:", reward)
     # print('\n')
     
     #pygame.time.wait(5)

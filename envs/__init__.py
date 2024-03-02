@@ -1,5 +1,6 @@
 import gymnasium as gym
 from .blueboat_env import BlueBoat
+from .blueboat_sbenv import SBBlueBoat
 from gymnasium.envs.registration import register
 
 register(
