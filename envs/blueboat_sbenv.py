@@ -243,7 +243,7 @@ class SBBlueBoat(gym.Env):
         # print(obs)
         # print(info)
         
-        return ({"state": self.x}, self.u)
+        return ({"state": self.x}, {"action": self.u})
 
     def to_screen(self,x,y):
         return (int(self.screen_width/2+x*self.coord_to_screen_scaling),

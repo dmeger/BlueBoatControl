@@ -146,6 +146,7 @@ class BlueBoat(gym.Env):
         self.boat_img_size = (100,49)
         self.trailer_img_size = (300,125)
         self.trailer_pos = (400,100)
+        #self.trailer_pos = (100,100)
         self.LINACCEL = 4.0
         self.JOY_MAX_LIN_ACCEL = 16.0
         self.ROTACCEL = 2.0
@@ -173,7 +174,7 @@ class BlueBoat(gym.Env):
         self.initial_dist = np.linalg.norm((self.bpos-self.tpos), ord=2)
         # self.reward_f = BlueBoatReward()
         
-        high = np.array([16.0, 16.0], dtype=np.float32)
+        high = np.array([8.0, 8.0], dtype=np.float32)
         self.action_space = spaces.Box(-high, high, dtype=np.float32)     
         # observation space is the combination of state, action, and trailer position 
         self.observation_space = spaces.Dict(
@@ -211,11 +212,14 @@ class BlueBoat(gym.Env):
         self.bpos = np.asarray(self.bpos)
         reward = 0.0
         threshold = 2.0
+        boundary = 800.0
         diff = self.bpos - self.tpos
         curr_dist = np.linalg.norm(diff, ord=2)
         
         if abs(curr_dist) <= threshold:
             reward = 1.0
+        elif abs(curr_dist) >= boundary:
+            reward = -10.0
         else:
             if self.initial_dist <= curr_dist:
                 reward = -0.01
@@ -237,7 +241,7 @@ class BlueBoat(gym.Env):
         obs = self.get_obs()
         state = self.get_state()
         reward = self.get_reward()
-        info = {"state": self.x, "t": self.t, "reward": reward}
+        info = {"t": self.t, "action": self.u}
         # return obs, state, reward, info
         
         # print(obs)
@@ -422,7 +426,7 @@ class BlueBoat(gym.Env):
         if abs(1.0-reward) <= 0.001:
             done = True
         truncated = False
-        info = {"x": self.x, "t": self.t}
+        info = {"t": self.t, "action": self.u}
         
         # return ({"state": self.x}, reward, done, truncated, {"action": self.u})
         return observation, reward, done, truncated, info
