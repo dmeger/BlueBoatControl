@@ -194,82 +194,81 @@ background = pygame.display.set_mode((screen_width, screen_height))
 boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
 trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
 
-def draw_path(mode):
-    match mode:
-        case 0:
-            return draw_spiral()
-        case 1:
-            return draw_spikes_coverage()
-        case 2:
-            return draw_square_coverage()
-        case 3:
-            return draw_slalom()
-        case 4:
-            return draw_large_slalom()
-        case _:
-            print("Invalid mode. Please use a number between 0 and 4.")
-            return draw_spiral()
-        
-# Draw a spiral path for the boat to follow
-def draw_spiral():
-    spiral_points = []
+class PathDrawer:
+    def __init__(self, screen_center, screen_width, screen_height):
+        self.screen_center = screen_center
+        self.screen_width = screen_width
+        self.screen_height = screen_height
 
-    x = screen_center[0] 
-    y = screen_center[1] 
-    spiral_points.append((int(x), int(y)))
-    spacing_factor = 8  # Adjust the spacing factor as needed
-    for t in np.arange(6 * np.pi, 15.5 * np.pi, 0.1):  # Adjust the range and step size as needed
-        x = screen_center[0] + spacing_factor * t * np.cos(t)
-        y = screen_center[1] + spacing_factor * t * np.sin(t)
+    def draw_path(self, mode):
+        match mode:
+            case 0:
+                return self.draw_spiral()
+            case 1:
+                return self.draw_spikes_coverage()
+            case 2:
+                return self.draw_square_coverage()
+            case 3:
+                return self.draw_slalom()
+            case 4:
+                return self.draw_large_slalom()
+            case _:
+                print("Invalid mode. Please use a number between 0 and 4.")
+                return self.draw_spiral()
+
+    def draw_spiral(self):
+        spiral_points = []
+        x = self.screen_center[0] 
+        y = self.screen_center[1] 
         spiral_points.append((int(x), int(y)))
+        spacing_factor = 8
+        for t in np.arange(6 * np.pi, 15.5 * np.pi, 0.1):
+            x = self.screen_center[0] + spacing_factor * t * np.cos(t)
+            y = self.screen_center[1] + spacing_factor * t * np.sin(t)
+            spiral_points.append((int(x), int(y)))
+        return spiral_points
 
-    return spiral_points
+    def draw_spikes_coverage(self):
+        coverage_points = []
+        border_spacing = 120
+        spacing = 120
+        for x in range(0 + border_spacing, self.screen_width - border_spacing, spacing):
+            for y in np.arange(0.0, 1.0, 0.1):
+                coverage_points.append((x + y * spacing / 2, border_spacing + y * (self.screen_height - 2 * border_spacing)))
+            for y in np.arange(0.0, 1.0, 0.1):
+                coverage_points.append((x + (1 + y) * spacing / 2, self.screen_height - border_spacing - y * (self.screen_height - 2 * border_spacing)))
+        return coverage_points
 
-# Draw a spikes coverage path for the boat to follow
-def draw_spikes_coverage():
-    coverage_points = []
-    border_spacing = 120
-    spacing = 120
-    for x in range(0 + border_spacing, screen_width - border_spacing, spacing):
-        for y in np.arange(0.0, 1.0, 0.1):
-            coverage_points.append((x + y * spacing / 2, border_spacing + y * (screen_height - 2 * border_spacing)))
-        for y in np.arange(0.0, 1.0, 0.1):
-            coverage_points.append((x + (1 + y) * spacing / 2, screen_height - border_spacing - y * (screen_height - 2 * border_spacing)))
-    return coverage_points
+    def draw_square_coverage(self):
+        coverage_points = []
+        border_spacing = 100
+        spacing = 200
+        for x in range(0 + border_spacing, self.screen_width - border_spacing, spacing):
+            for y in np.arange(0.0, 1.0, 0.1):
+                coverage_points.append((x, border_spacing + y * (self.screen_height - 2 * border_spacing)))
+            for y in np.arange(0.0, 1.0, 0.5):
+                coverage_points.append((x + y * spacing / 2, self.screen_height - border_spacing))
+            for y in np.arange(0.0, 1.0, 0.1):
+                coverage_points.append((x + spacing / 2, self.screen_height - border_spacing - y * (self.screen_height - 2 * border_spacing)))
+            for y in np.arange(0.0, 1.0, 0.5):
+                coverage_points.append((x + (1 + y) * spacing / 2, border_spacing))
+        return coverage_points
 
-# Draw a square coverage path for the boat to follow
-def draw_square_coverage():
-    coverage_points = []
-    border_spacing = 100
-    spacing = 200
-    for x in range(0 + border_spacing, screen_width - border_spacing, spacing):
-        for y in np.arange(0.0, 1.0, 0.1):
-            coverage_points.append((x, border_spacing + y * (screen_height - 2 * border_spacing)))
-        for y in np.arange(0.0, 1.0, 0.5):
-            coverage_points.append((x + y * spacing / 2, screen_height - border_spacing))
-        for y in np.arange(0.0, 1.0, 0.1):
-            coverage_points.append((x + spacing / 2, screen_height - border_spacing - y * (screen_height - 2 * border_spacing)))
-        for y in np.arange(0.0, 1.0, 0.5):
-            coverage_points.append((x + (1 + y) * spacing / 2, border_spacing))
-    return coverage_points
+    def draw_slalom(self):
+        slalom_points = []
+        border_spacing = 60
+        for x in range(0 + border_spacing, self.screen_width - border_spacing, 10):
+            y = self.screen_center[1] + (self.screen_height - 2 * border_spacing) / 6 * np.sin((x - border_spacing) * 6 * np.pi / self.screen_width)
+            slalom_points.append((x, y))
+        return slalom_points
 
-# draw a slalom curve path for the boat to follow
-def draw_slalom():
-    slalom_points = []
-    border_spacing = 60
-    for x in range(0 + border_spacing, screen_width - border_spacing, 10):
-        y = screen_center[1] + (screen_height - 2 * border_spacing) / 6 * np.sin((x - border_spacing) * 6 * np.pi / screen_width)
-        slalom_points.append((x, y))
-    return slalom_points
-
-# draw a slalom curve path for the boat to follow
-def draw_large_slalom():
-    slalom_points = []
-    border_spacing = 60
-    for x in range(0 + border_spacing, screen_width - border_spacing, 10):
-        y = screen_center[1] + (screen_height - 2 * border_spacing) / 3 * np.sin((x - border_spacing) * 3 * np.pi / screen_width)
-        slalom_points.append((x, y))
-    return slalom_points
+    def draw_large_slalom(self):
+        slalom_points = []
+        border_spacing = 60
+        for x in range(0 + border_spacing, self.screen_width - border_spacing, 10):
+            y = self.screen_center[1] + (self.screen_height - 2 * border_spacing) / 3 * np.sin((x - border_spacing) * 3 * np.pi / self.screen_width)
+            slalom_points.append((x, y))
+        return slalom_points
 
 def from_screen(waypoint):
     return (waypoint[0] - screen_width/2)/coord_to_screen_scaling, (waypoint[1] - screen_height/2)/coord_to_screen_scaling
@@ -536,7 +535,8 @@ boat = BlueBoat(x0)
 print(boat)
 state = boat.get_state()
 print(state)
-path_waypoints = draw_path(auto_path_mode)
+path_drawer = PathDrawer(screen_center, screen_width, screen_height)
+path_waypoints = path_drawer.draw_path(auto_path_mode)
 
 FORWARD_MIN_LIN_ACCEL = 6.0
 FORWARD_MAX_LIN_ACCEL = 16.0
@@ -574,29 +574,9 @@ while not Done:
             if event.key == pygame.K_c:         # holding "c" key enables continuous control
                 Continuous_Control = True
             # set the auto path mode with numbers
-            if event.key == pygame.K_1:
-                auto_path_mode = 0
-                path_waypoints = draw_path(auto_path_mode)
-                current_waypoint_index = 0
-                path_history = []
-            if event.key == pygame.K_2:
-                auto_path_mode = 1
-                path_waypoints = draw_path(auto_path_mode)
-                current_waypoint_index = 0
-                path_history = []
-            if event.key == pygame.K_3:
-                auto_path_mode = 2
-                path_waypoints = draw_path(auto_path_mode)
-                current_waypoint_index = 0
-                path_history = []
-            if event.key == pygame.K_4:
-                auto_path_mode = 3
-                path_waypoints = draw_path(auto_path_mode)
-                current_waypoint_index = 0
-                path_history = []
-            if event.key == pygame.K_5:
-                auto_path_mode = 4
-                path_waypoints = draw_path(auto_path_mode)
+            if event.key == pygame.K_1 or event.key == pygame.K_2 or event.key == pygame.K_3 or event.key == pygame.K_4 or event.key == pygame.K_5:
+                auto_path_mode = int(event.unicode) - 1
+                path_waypoints = path_drawer.draw_path(auto_path_mode)
                 current_waypoint_index = 0
                 path_history = []
             if event.key == pygame.K_UP:
@@ -635,7 +615,7 @@ while not Done:
                 control = [clamped_throttle, clamped_steering]
                 current_waypoint_index = waypointReached( state, goal, current_waypoint_index)
             else: # draw spiral again
-                path_waypoints = draw_path(auto_path_mode)
+                path_waypoints = path_drawer.draw_path(auto_path_mode)
                 current_waypoint_index = 0
                 path_history = []
         elif throttle != 0 or steering != 0:
