@@ -100,13 +100,11 @@ def computeJoystickControl(throttle, steering):
         current_mode = FORWARD
         clamped_throttle = min(FORWARD_MAX_LIN_ACCEL, max(FORWARD_MIN_LIN_ACCEL, throttle)) # Clamp throttle to valid range
         clamped_throttle_ratio = (clamped_throttle / FORWARD_MAX_LIN_ACCEL)
-        # TODO clamp steering to valid range (thrust vector must be between -25 and 25 degrees, --> it depends on throttle)
         clamped_steering = min(MAX_ROT_ACCEL * clamped_throttle_ratio, max(-MAX_ROT_ACCEL * clamped_throttle_ratio, steering))
     elif throttle < 0:          # If throttle is negative
         current_mode = REVERSE
         clamped_throttle = - min(REVERSE_MAX_LIN_ACCEL, max(REVERSE_MIN_LIN_ACCEL, abs(throttle))) # Clamp throttle to valid range
         clamped_throttle_ratio = (- clamped_throttle / REVERSE_MAX_LIN_ACCEL)
-        # TODO clamp steering to valid range (thrust vector must be between -25 and 25 degrees, --> it depends on throttle)
         clamped_steering = min(MAX_ROT_ACCEL * clamped_throttle_ratio, max(-MAX_ROT_ACCEL * clamped_throttle_ratio, steering))
     else:
         current_mode = UNDEFINED
@@ -181,6 +179,10 @@ steering_bar_width = 200
 steering_bar_height = 20
 steering_bar_position = (screen_width // 2 - steering_bar_width // 2, 750)
 driving_mode_position = (screen_width // 2 - steering_bar_width // 2, 650)
+vel_prof_height = 150
+vel_prof_width = 300
+lin_vel_prof_pos = (50, 0)
+ang_vel_prof_pos = (50, vel_prof_height)
 
 # FONT
 pygame.font.init()
@@ -270,9 +272,6 @@ class PathDrawer:
             slalom_points.append((x, y))
         return slalom_points
 
-def from_screen(waypoint):
-    return (waypoint[0] - screen_width/2)/coord_to_screen_scaling, (waypoint[1] - screen_height/2)/coord_to_screen_scaling
-
 def minangle(theta):
     while theta > np.pi:
         theta = theta - 2*np.pi
@@ -327,6 +326,9 @@ class BlueBoat(object):
 
     def to_screen(self,x,y):
         return (int(screen_width/2+x*coord_to_screen_scaling),int(screen_height/2+y*coord_to_screen_scaling))
+    
+    def from_screen(self,x,y):
+        return ((x-screen_width/2)/coord_to_screen_scaling,(y-screen_height/2)/coord_to_screen_scaling)
 
     def blitRotate(self,surf, image, pos, originPos, angle):
 
@@ -404,9 +406,6 @@ class BlueBoat(object):
                                             throttle_bar_position[1] + throttle_bar_height),
                                             2)
         
-        
-            
-
     def draw_steering_bar(self, bg, steering, clamped_steering):
         steering_percentage = (-steering / MAX_ROT_ACCEL) * 100
         clamped_steering_percentage = (-clamped_steering / MAX_ROT_ACCEL) * 100
@@ -429,6 +428,60 @@ class BlueBoat(object):
                                             steering_bar_position[1] + steering_bar_height),
                                             2)
         
+    def draw_velocity_profiles(self, bg):
+        # draw 2 white rectanglse as the background for the velocity profiles
+        pygame.draw.rect(bg, white, (lin_vel_prof_pos[0], lin_vel_prof_pos[1], vel_prof_width, vel_prof_height))
+        pygame.draw.rect(bg, white, (ang_vel_prof_pos[0], ang_vel_prof_pos[1], vel_prof_width, vel_prof_height))
+        # draw the x and y axes for the velocity profiles
+        pygame.draw.line(bg, black, (lin_vel_prof_pos[0], lin_vel_prof_pos[1] + vel_prof_height), (lin_vel_prof_pos[0] + vel_prof_width, lin_vel_prof_pos[1] + vel_prof_height), 2)
+        pygame.draw.line(bg, black, (lin_vel_prof_pos[0], lin_vel_prof_pos[1]), (lin_vel_prof_pos[0], lin_vel_prof_pos[1] + vel_prof_height), 2)
+        pygame.draw.line(bg, black, (ang_vel_prof_pos[0], ang_vel_prof_pos[1] + vel_prof_height), (ang_vel_prof_pos[0] + vel_prof_width, ang_vel_prof_pos[1] + vel_prof_height), 2)
+        pygame.draw.line(bg, black, (ang_vel_prof_pos[0], ang_vel_prof_pos[1]), (ang_vel_prof_pos[0], ang_vel_prof_pos[1] + vel_prof_height), 2)
+        # draw the x and y axis labels for the velocity profiles
+        linear_velocity_label = font.render("Linear Velocity", True, black)
+        bg.blit(linear_velocity_label, (lin_vel_prof_pos[0] + vel_prof_width / 2 - 50, lin_vel_prof_pos[1] + vel_prof_height - 30))
+        angular_velocity_label = font.render("Angular Velocity", True, black)
+        bg.blit(angular_velocity_label, (ang_vel_prof_pos[0] + vel_prof_width / 2 - 50, ang_vel_prof_pos[1] + vel_prof_height - 30))
+        linear_velocity_profile = velocity_profiles[0]
+        angular_velocity_profile = velocity_profiles[1]
+        max_linear_velocity = math.ceil(max(linear_velocity_profile) + 0.1)
+        min_linear_velocity = max(math.floor(min(linear_velocity_profile) - 0.1), 0)
+        max_angular_velocity = math.ceil(max(angular_velocity_profile) + 0.1)
+        min_angular_velocity = math.floor(min(angular_velocity_profile) - 0.1)
+        lin_vel_range = max_linear_velocity - min_linear_velocity
+        ang_vel_range = max_angular_velocity - min_angular_velocity
+        lin_vel_tick_spacing = max(1, math.ceil(lin_vel_range / 5))
+        ang_vel_tick_spacing = max(1, math.ceil(ang_vel_range / 5))
+        # draw the ticks on the x and y axes for the velocity profiles
+        for i in range(0, vel_prof_width, 50): 
+            pygame.draw.line(bg, black, (ang_vel_prof_pos[0] + i, ang_vel_prof_pos[1] + vel_prof_height), (ang_vel_prof_pos[0] + i, ang_vel_prof_pos[1] + vel_prof_height + 5), 2)
+        for i in range(min_linear_velocity, max_linear_velocity, lin_vel_tick_spacing): 
+            pygame.draw.line(bg, black, (lin_vel_prof_pos[0] - 5, lin_vel_prof_pos[1] + vel_prof_height - (i - min_linear_velocity) / (max_linear_velocity - min_linear_velocity) * vel_prof_height), (lin_vel_prof_pos[0], lin_vel_prof_pos[1] + vel_prof_height - (i - min_linear_velocity) / (max_linear_velocity - min_linear_velocity) * vel_prof_height), 2)
+        for i in range(min_angular_velocity, max_angular_velocity, ang_vel_tick_spacing): 
+            pygame.draw.line(bg, black, (ang_vel_prof_pos[0] - 5, ang_vel_prof_pos[1] + vel_prof_height - (i - min_angular_velocity) / (max_angular_velocity - min_angular_velocity) * vel_prof_height), (ang_vel_prof_pos[0], ang_vel_prof_pos[1] + vel_prof_height - (i - min_angular_velocity) / (max_angular_velocity - min_angular_velocity) * vel_prof_height), 2)
+        # display the tick labels
+        for i in range(0, vel_prof_width, 50):
+            label = font.render(str(i), True, black)
+            bg.blit(label, (ang_vel_prof_pos[0] + i - 10, ang_vel_prof_pos[1] + vel_prof_height + 5))
+        for i in range(min_linear_velocity, max_linear_velocity, lin_vel_tick_spacing):
+            label = font.render(str(i), True, black)
+            bg.blit(label, (lin_vel_prof_pos[0] - 30, lin_vel_prof_pos[1] + vel_prof_height - (i - min_linear_velocity) / (max_linear_velocity - min_linear_velocity) * vel_prof_height - 10))                                                                                    
+        for i in range(min_angular_velocity, max_angular_velocity, ang_vel_tick_spacing):
+            label = font.render(str(i), True, black)
+            bg.blit(label, (ang_vel_prof_pos[0] - 30, ang_vel_prof_pos[1] + vel_prof_height - (i - min_angular_velocity) / (max_angular_velocity - min_angular_velocity) * vel_prof_height - 10))
+        # draw the velocity profiles
+        for i in range(len(linear_velocity_profile) - 1):
+            pygame.draw.line(bg, light_green, (lin_vel_prof_pos[0] + i, lin_vel_prof_pos[1] + vel_prof_height - (linear_velocity_profile[i] - min_linear_velocity) / (max_linear_velocity - min_linear_velocity) * vel_prof_height), (lin_vel_prof_pos[0] + i + 1, lin_vel_prof_pos[1] + vel_prof_height - (linear_velocity_profile[i + 1] - min_linear_velocity) / (max_linear_velocity - min_linear_velocity) * vel_prof_height), 2)
+            pygame.draw.line(bg, light_blue, (ang_vel_prof_pos[0] + i, ang_vel_prof_pos[1] + vel_prof_height - (angular_velocity_profile[i] - min_angular_velocity) / (max_angular_velocity - min_angular_velocity) * vel_prof_height), (ang_vel_prof_pos[0] + i + 1, ang_vel_prof_pos[1] + vel_prof_height - (angular_velocity_profile[i + 1] - min_angular_velocity) / (max_angular_velocity - min_angular_velocity) * vel_prof_height), 2)
+
+    def add_to_velocity_profiles(self, boat_angle, x_velocity, y_velocity, angular_velocity):
+        real_linear_velocity = np.sqrt(x_velocity ** 2 + y_velocity ** 2) # not necessarily in the same direction as the boat orientation
+        velocity_profiles[0].append(real_linear_velocity)
+        velocity_profiles[1].append(angular_velocity)
+        if(len(velocity_profiles[0]) > vel_prof_width):
+            velocity_profiles[0].pop(0)
+            velocity_profiles[1].pop(0)
+    
     def add_to_path_history(self, x, y):
         path_history.append((x, y))
         if(len(path_history) > 2000):
@@ -505,6 +558,7 @@ def redraw():
     boat.draw_steering_bar(background, steering, clamped_steering)
     boat.display_driving_mode(background)
     boat.display_path_history(background)
+    boat.draw_velocity_profiles(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
 
@@ -527,6 +581,7 @@ steering = 0
 clamped_throttle = 0
 clamped_steering = 0
 path_history = []
+velocity_profiles = [[], []]
 
 # Starting here is effectively the main function.
 # It's a simple GUI drawing loop that calls to your code to compute the control, sets it to the 
@@ -605,7 +660,7 @@ while not Done:
         # use computePIDControl to compute the control input112
         if Auto_Control:
             if current_waypoint_index < len(path_waypoints) - 1:
-                goal = from_screen(path_waypoints[current_waypoint_index])
+                goal = boat.from_screen(path_waypoints[current_waypoint_index][0], path_waypoints[current_waypoint_index][1])
                 throttle, steering, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
                 if Continuous_Control:
                     clamped_throttle, clamped_steering = throttle, steering
@@ -624,6 +679,7 @@ while not Done:
         #control = computeControl( state )  # This is the call to the code you write
         state = boat.step(control)
         boat.add_to_path_history(state[0], state[1])
+        boat.add_to_velocity_profiles(state[2], state[3], state[4], state[5])
         #print(state)
 
     redraw()
