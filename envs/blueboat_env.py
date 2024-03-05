@@ -133,6 +133,8 @@ class BlueBoat(gym.Env):
         self.X0 = np.array(X0,dtype=np.float32).flatten()
         self.x = self.X0
         self.t = 0.0
+        self.trailer_pos = (400,100)
+        #self.trailer_pos = (500,400)
         self.x0 = np.array([0,0,0,0,0,0], dtype=np.float32)
         self.goal = np.array([ 0, 0, 0, np.pi ], dtype=np.float32)
         self.screen_width = 800
@@ -145,8 +147,6 @@ class BlueBoat(gym.Env):
         self.coord_to_screen_scaling = 100.0
         self.boat_img_size = (100,49)
         self.trailer_img_size = (300,125)
-        self.trailer_pos = (400,100)
-        #self.trailer_pos = (100,100)
         self.LINACCEL = 4.0
         self.JOY_MAX_LIN_ACCEL = 16.0
         self.ROTACCEL = 2.0
@@ -174,7 +174,7 @@ class BlueBoat(gym.Env):
         self.initial_dist = np.linalg.norm((self.bpos-self.tpos), ord=2)
         # self.reward_f = BlueBoatReward()
         
-        high = np.array([8.0, 8.0], dtype=np.float32)
+        high = np.array([10.0, 10.0], dtype=np.float32)
         self.action_space = spaces.Box(-high, high, dtype=np.float32)     
         # observation space is the combination of state, action, and trailer position 
         self.observation_space = spaces.Dict(
@@ -212,9 +212,12 @@ class BlueBoat(gym.Env):
         self.bpos = np.asarray(self.bpos)
         reward = 0.0
         threshold = 2.0
-        boundary = 800.0
+        boundary = self.screen_width
         diff = self.bpos - self.tpos
         curr_dist = np.linalg.norm(diff, ord=2)
+        
+        #print(self.initial_dist)
+        #print(curr_dist)
         
         if abs(curr_dist) <= threshold:
             reward = 1.0
@@ -224,7 +227,8 @@ class BlueBoat(gym.Env):
             if self.initial_dist <= curr_dist:
                 reward = -0.01
             else:
-                reward = 0.01
+                reward = 1.0 / curr_dist
+                # reward = 0.01
         # reward = e^(-x)
         # reward = np.exp(-x)
         return reward
@@ -276,6 +280,7 @@ class BlueBoat(gym.Env):
     def draw(self, bg, boat_img, trailer_img):  
         boat_rad = 20.0
         boat_centre = self.to_screen(self.x[0],self.x[1])
+        #boat_centre = (self.x[0],self.x[1])
         
         #boat_direction = (int(boat_centre[0]+boat_rad*np.cos(self.x[2])),int(boat_centre[1]+boat_rad*np.sin(self.x[2])))
         #pygame.draw.circle(bg, Dark_red, boat_centre, radius - 2)
@@ -423,7 +428,7 @@ class BlueBoat(gym.Env):
         reward = self.get_reward()
         reward = float(reward)
         done = False
-        if abs(1.0-reward) <= 0.001:
+        if reward >= 1.0:
             done = True
         truncated = False
         info = {"t": self.t, "action": self.u}

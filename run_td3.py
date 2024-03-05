@@ -30,9 +30,11 @@ def eval_policy(policy, env_name, seed, eval_episodes=5):
         while not done:
             action = policy.select_action(np.array(state))
             # state, reward, done, _ = eval_env.step(action)
+            # print(action)
             observation, reward, done, truncated, info = env.step(action)
             state = observation["state"]
-            env.render()
+            env.render()            
+            # print(reward)
             
             avg_reward += reward
 
@@ -90,6 +92,7 @@ if __name__ == "__main__":
     state_dim = env.observation_space["state"].shape[0]
     action_dim = env.action_space.shape[0] 
     max_action = float(env.action_space.high[0])
+    print(max_action)
 
     kwargs = {
         "state_dim": state_dim,
