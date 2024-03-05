@@ -155,6 +155,8 @@ Auto_Control = False        # when True, the boat will follow the spiral path
                             # when False, the boat will be controlled by the user
 Continuous_Control = False  # when True, the boat will be controlled continuously in Auto_Control mode
                             # when False, the boat will be controlled discretely in Auto_Control mode
+Hide_Vel_Prof = False       # when True, the velocity profiles will not be displayed
+
 #COLORS
 white = (255,255,255)
 black = (0,0,0)
@@ -438,10 +440,10 @@ class BlueBoat(object):
         pygame.draw.line(bg, black, (ang_vel_prof_pos[0], ang_vel_prof_pos[1] + vel_prof_height), (ang_vel_prof_pos[0] + vel_prof_width, ang_vel_prof_pos[1] + vel_prof_height), 2)
         pygame.draw.line(bg, black, (ang_vel_prof_pos[0], ang_vel_prof_pos[1]), (ang_vel_prof_pos[0], ang_vel_prof_pos[1] + vel_prof_height), 2)
         # draw the x and y axis labels for the velocity profiles
-        linear_velocity_label = font.render("Linear Velocity", True, black)
-        bg.blit(linear_velocity_label, (lin_vel_prof_pos[0] + vel_prof_width / 2 - 50, lin_vel_prof_pos[1] + vel_prof_height - 30))
-        angular_velocity_label = font.render("Angular Velocity", True, black)
-        bg.blit(angular_velocity_label, (ang_vel_prof_pos[0] + vel_prof_width / 2 - 50, ang_vel_prof_pos[1] + vel_prof_height - 30))
+        linear_velocity_label = font.render("Linear Velocity (m/s)", True, black)
+        bg.blit(linear_velocity_label, (lin_vel_prof_pos[0] + vel_prof_width / 2 - 80, lin_vel_prof_pos[1] + vel_prof_height - 30))
+        angular_velocity_label = font.render("Angular Velocity (rad/s)", True, black)
+        bg.blit(angular_velocity_label, (ang_vel_prof_pos[0] + vel_prof_width / 2 - 80, ang_vel_prof_pos[1] + vel_prof_height - 30))
         linear_velocity_profile = velocity_profiles[0]
         angular_velocity_profile = velocity_profiles[1]
         max_linear_velocity = math.ceil(max(linear_velocity_profile) + 0.1)
@@ -558,7 +560,8 @@ def redraw():
     boat.draw_steering_bar(background, steering, clamped_steering)
     boat.display_driving_mode(background)
     boat.display_path_history(background)
-    boat.draw_velocity_profiles(background)
+    if not Hide_Vel_Prof:
+        boat.draw_velocity_profiles(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
 
@@ -626,6 +629,8 @@ while not Done:
                 Pause = True
             if event.key == pygame.K_a:         # "a" key toggles auto control
                 Auto_Control = not Auto_Control
+            if event.key == pygame.K_v:         # "v" key toggles velocity profiles
+                Hide_Vel_Prof = not Hide_Vel_Prof
             if event.key == pygame.K_c:         # holding "c" key enables continuous control
                 Continuous_Control = True
             # set the auto path mode with numbers
