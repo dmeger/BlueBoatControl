@@ -168,7 +168,7 @@ class BlueBoat(gym.Env):
         self.initial_dist = np.linalg.norm((self.bpos-self.tpos), ord=2)
         # self.reward_f = BlueBoatReward()
         
-        high = np.array([10.0, 10.0], dtype=np.float32)
+        high = np.array([10.0, 5.0], dtype=np.float32)
         self.action_space = spaces.Box(-high, high, dtype=np.float32)     
         # observation space is the combination of state, action, and trailer position 
         size_meters = self.from_screen(self.screen_width, self.screen_height)
@@ -213,6 +213,7 @@ class BlueBoat(gym.Env):
         # print(self.initial_dist)
         # print(curr_dist)
         
+        # reward = 1.0 / curr_dist
         if abs(curr_dist) <= threshold:
             reward = 1.0
         elif abs(curr_dist) >= boundary:
@@ -254,6 +255,11 @@ class BlueBoat(gym.Env):
     def from_screen(self,x,y):
         return ((x-self.screen_width/2)/self.coord_to_screen_scaling,
                 (y-self.screen_height/2)/self.coord_to_screen_scaling)
+    
+    def is_inside_map(self,x,y):
+        boat_centre2 = self.to_screen(x,y)
+        # print(boat_centre2)
+        return boat_centre2[0] > 0 and boat_centre2[0] < self.screen_width and boat_centre2[1] > 0 and boat_centre2[1] < self.screen_height
 
     def blitRotate(self, surf, image, pos, originPos, angle):
 

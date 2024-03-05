@@ -16,31 +16,37 @@ import TD3
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
 def eval_policy(policy, env_name, seed, eval_episodes=10):
-    eval_env = gym.make(env_name)
+    x0 = [0,0,0,0,0,0] 
+    # env = gym.make('BlueBoat-v0', X0=x0)
+    eval_env = gym.make(env_name, X0=x0)
     # eval_env.seed(seed + 100)
 
     max_timesteps = 10000
     avg_reward = 0.
-    for _ in range(eval_episodes):
+    for i in range(eval_episodes):
         # state, done = eval_env.reset(), False
         done = False
         count = 0
-        obs, info = env.reset()
+        #obs, info = eval_env.reset()
+        obs, info = eval_env.reset(seed=seed+10*i)
         state = obs["state"]
-        env.render()
+        eval_env.render()
         
         while not done:
             action = policy.select_action(np.array(state))
             # state, reward, done, _ = eval_env.step(action)
             # print(action)
-            observation, reward, done, truncated, info = env.step(action)
-            state = observation["state"]
-            env.render()            
-            # print(observation)
+            observation, reward, done, truncated, info = eval_env.step(action)
+            s = observation["state"]
+            boat_pos = s[:2]
+            # print(boat_pos)
+            eval_env.render()            
+            # print("reward: ", reward)
             
             avg_reward += reward
             count += 1
-            if count >= max_timesteps:
+            is_inside = eval_env.is_inside_map(boat_pos[0], boat_pos[1])
+            if count >= max_timesteps or (not is_inside):
                 done = True
 
     avg_reward /= eval_episodes
@@ -57,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="TD3")                  # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--env", default="BlueBoat-v0")          # OpenAI gym environment name
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--start_timesteps", default=25e2, type=int)# Time steps initial random policy is used
+    parser.add_argument("--start_timesteps", default=25e3, type=int)# Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=5e3, type=int)       # How often (time steps) we evaluate
     parser.add_argument("--max_timesteps", default=1e5, type=int)   # Max time steps to run environment
     parser.add_argument("--expl_noise", default=0.1, type=float)    # Std of Gaussian exploration noise
@@ -90,14 +96,14 @@ if __name__ == "__main__":
 
     # Set seeds
     # env.seed(args.seed)
-    # env.action_space.seed(args.seed)
+    env.action_space.seed(args.seed)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     
     state_dim = env.observation_space["state"].shape[0]
     action_dim = env.action_space.shape[0] 
     max_action = float(env.action_space.high[0])
-    print(max_action)
+    # print(max_action)
 
     kwargs = {
         "state_dim": state_dim,
@@ -132,7 +138,7 @@ if __name__ == "__main__":
 
     # state, done = env.reset(), False
     done = False
-    obs, info = env.reset()
+    obs, info = env.reset(seed=args.seed)
     state = obs["state"]
     env.render()
     
@@ -155,6 +161,7 @@ if __name__ == "__main__":
 
         # Perform action
         # next_state, reward, done, _ = env.step(action) 
+        # print(action)
         observation, reward, done, truncated, info = env.step(action)
         next_state = observation["state"]
         env.render()
