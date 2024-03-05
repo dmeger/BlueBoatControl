@@ -38,13 +38,6 @@ from .blueboat_model import BlueBoatModel
 # goal = np.array([ 0, 0, 0, np.pi ])     # This is where we want to end up. Perfectly at the centre
                                         # of the screen, with the boat pointing to the right.
 
-# TODO: Fill in this function
-def computeControl( x ):
-
-    control = [1,0,0]
-
-    return control
-
 # After this is all the code to run the BlueBoat physics, draw it on the screen, etc. 
 # You should not have to change anything below this, but are encouraged to read and understand
 # as much as possible.
@@ -133,8 +126,8 @@ class BlueBoat(gym.Env):
         self.X0 = np.array(X0,dtype=np.float32).flatten()
         self.x = self.X0
         self.t = 0.0
-        self.trailer_pos = (400,100)
-        #self.trailer_pos = (500,400)
+        #self.trailer_pos = (400,100) # It's in pixels!
+        self.trailer_pos = (500,50)
         self.x0 = np.array([0,0,0,0,0,0], dtype=np.float32)
         self.goal = np.array([ 0, 0, 0, np.pi ], dtype=np.float32)
         self.screen_width = 800
@@ -170,21 +163,22 @@ class BlueBoat(gym.Env):
             self.model = BlueBoatModel(self.X0)
         self.bpos = self.x[:2]
         self.bpos = np.asarray(self.bpos, dtype=np.float32)
-        self.tpos = np.asarray(self.trailer_pos, dtype=np.float32)
+        from_trailer_pos = self.from_screen(self.trailer_pos[0], self.trailer_pos[1])
+        self.tpos = np.asarray(from_trailer_pos, dtype=np.float32)
         self.initial_dist = np.linalg.norm((self.bpos-self.tpos), ord=2)
         # self.reward_f = BlueBoatReward()
         
         high = np.array([10.0, 10.0], dtype=np.float32)
         self.action_space = spaces.Box(-high, high, dtype=np.float32)     
         # observation space is the combination of state, action, and trailer position 
+        size_meters = self.from_screen(self.screen_width, self.screen_height)
+        self.grid_shape = np.asarray(size_meters, dtype=np.float32)
+        self.high_s = np.array([self.grid_shape[0], self.grid_shape[1], np.pi, 10, 10, np.pi], dtype=np.float32)
         self.observation_space = spaces.Dict(
-            {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(6, ), dtype=np.float32),
+            {"state": spaces.Box(-self.high_s, self.high_s, shape=(6, ), dtype=np.float32),
             "action": spaces.Box(-high, high, shape=(2, ), dtype=np.float32),
-            "target": spaces.Box(-self.screen_width, self.screen_width, shape=(2, ), dtype=np.float32),
+            "target": spaces.Box(-self.grid_shape, self.grid_shape, shape=(2, ), dtype=np.float32),
             })
-        # self.observation_space = spaces.Dict(
-        #    {"state": spaces.Box(-self.screen_width, self.screen_width, shape=(6, ), dtype=np.float32)})
-
         # self.u = 0
         self.u = np.array([0.0, 0.0], dtype=np.float32)
         # This is a key line that makes this class an accurate version of BlueBoat dynamics.
@@ -211,13 +205,13 @@ class BlueBoat(gym.Env):
         self.bpos = self.x[:2]
         self.bpos = np.asarray(self.bpos)
         reward = 0.0
-        threshold = 2.0
-        boundary = self.screen_width
+        threshold = 1.0
+        boundary = 2.0 * self.initial_dist
         diff = self.bpos - self.tpos
         curr_dist = np.linalg.norm(diff, ord=2)
         
-        #print(self.initial_dist)
-        #print(curr_dist)
+        # print(self.initial_dist)
+        # print(curr_dist)
         
         if abs(curr_dist) <= threshold:
             reward = 1.0
@@ -256,6 +250,10 @@ class BlueBoat(gym.Env):
     def to_screen(self,x,y):
         return (int(self.screen_width/2+x*self.coord_to_screen_scaling),
                 int(self.screen_height/2+y*self.coord_to_screen_scaling))
+    
+    def from_screen(self,x,y):
+        return ((x-self.screen_width/2)/self.coord_to_screen_scaling,
+                (y-self.screen_height/2)/self.coord_to_screen_scaling)
 
     def blitRotate(self, surf, image, pos, originPos, angle):
 

@@ -15,14 +15,16 @@ import TD3
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=5):
+def eval_policy(policy, env_name, seed, eval_episodes=10):
     eval_env = gym.make(env_name)
     # eval_env.seed(seed + 100)
 
+    max_timesteps = 10000
     avg_reward = 0.
     for _ in range(eval_episodes):
         # state, done = eval_env.reset(), False
         done = False
+        count = 0
         obs, info = env.reset()
         state = obs["state"]
         env.render()
@@ -34,9 +36,12 @@ def eval_policy(policy, env_name, seed, eval_episodes=5):
             observation, reward, done, truncated, info = env.step(action)
             state = observation["state"]
             env.render()            
-            # print(reward)
+            # print(observation)
             
             avg_reward += reward
+            count += 1
+            if count >= max_timesteps:
+                done = True
 
     avg_reward /= eval_episodes
 
