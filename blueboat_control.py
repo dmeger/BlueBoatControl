@@ -331,6 +331,18 @@ class BlueBoat(object):
     
     def from_screen(self,x,y):
         return ((x-screen_width/2)/coord_to_screen_scaling,(y-screen_height/2)/coord_to_screen_scaling)
+    
+    def is_inside_map(self,x,y):
+        boat_centre = self.to_screen(x,y)
+        return boat_centre[0] > 0 and boat_centre[0] < screen_width and boat_centre[1] > 0 and boat_centre[1] < screen_height
+    
+    def is_in_trailer(self,x,y):
+        boat_centre = self.to_screen(x,y)
+        trailer_centre = (trailer_pos[0] + trailer_img_size[0] / 2, trailer_pos[1] + trailer_img_size[1] / 2)
+        x_threshold = trailer_img_size[0] / 2
+        y_threshold = trailer_img_size[1] / 2
+        theta_threshold = np.pi / 16 # 10 degrees
+        return boat_centre[0] > trailer_pos[0] - x_threshold and boat_centre[0] < trailer_pos[0] + x_threshold and boat_centre[1] > trailer_pos[1] - y_threshold and boat_centre[1] < trailer_pos[1] + y_threshold and abs(self.x[2]) < theta_threshold
 
     def blitRotate(self,surf, image, pos, originPos, angle):
 
@@ -369,6 +381,20 @@ class BlueBoat(object):
         pygame.draw.lines(bg, Dark_red, False, [boat_motor, angular_thrust_arrow], 2)
 
         #pygame.draw.rect(bg,black,pygame.Rect(self.to_screen(self.TRAILER_LEFT_X,self.TRAILER_LEFT_Y),(self.TRAILER_HEIGHT*coord_to_screen_scaling,self.TRAILER_WIDTH*coord_to_screen_scaling)))
+
+    def display_pos_info(self, bg):
+        # display if the boat is inside the map or not
+        if self.is_inside_map(self.x[0], self.x[1]):
+            inside_map_text = font.render("Inside map", True, black)
+        else:
+            inside_map_text = font.render("Outside map", True, black)
+        bg.blit(inside_map_text, (10, 10))
+        # display if the boat is in the trailer or not
+        if self.is_in_trailer(self.x[0], self.x[1]):
+            in_trailer_text = font.render("In trailer", True, black)
+        else:
+            in_trailer_text = font.render("Not in trailer", True, black)
+        bg.blit(in_trailer_text, (10, 30))
 
     def display_driving_mode(self, bg):
         # Display mode text in different colors based on the mode. Green background for forward, red background for reverse, blue background for neutral, black background for continuous, white background for undefined
@@ -560,6 +586,7 @@ def redraw():
     boat.draw_steering_bar(background, steering, clamped_steering)
     boat.display_driving_mode(background)
     boat.display_path_history(background)
+    boat.display_pos_info(background)
     if not Hide_Vel_Prof:
         boat.draw_velocity_profiles(background)
      # Draw a solid blue circle in the center
