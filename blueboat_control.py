@@ -15,6 +15,7 @@ is always welcome.
  
 import pygame
 import math
+import random
 import numpy as np
 from scipy.integrate import ode
 import clock
@@ -155,7 +156,7 @@ Auto_Control = False        # when True, the boat will follow the spiral path
                             # when False, the boat will be controlled by the user
 Continuous_Control = False  # when True, the boat will be controlled continuously in Auto_Control mode
                             # when False, the boat will be controlled discretely in Auto_Control mode
-Hide_Vel_Prof = False       # when True, the velocity profiles will not be displayed
+Hide_Vel_Prof = True       # when True, the velocity profiles will not be displayed
 
 #COLORS
 white = (255,255,255)
@@ -168,16 +169,21 @@ Dark_red = (150, 0, 0)
 light_blue = (173, 216, 230)
 light_red = (255, 182, 193)
 light_green = (144, 238, 144)
+dark_green = (0, 150, 0)
 light_grey = (150, 150, 150)
+
+# DISPLAY
 radius = 20
 coord_to_screen_scaling = 100.0
 screen_center = (screen_width // 2, screen_height // 2)
 boat_img_size = (100,49)
-trailer_img_size = (300,125)
-trailer_pos = (400,100)
-trailer_centre = (trailer_pos[0] + trailer_img_size[0] * 0.33, trailer_pos[1] + trailer_img_size[1] * 0.53)
+trailer_img_size = (300*1.15,125*1.15)
 trailer_threshold = (trailer_img_size[0] * 0.1, trailer_img_size[1] * 0.1)
-trailer_yaw = 0 # TODO add trailer_yaw image rotation
+trailer_pos = [400,100]
+trailer_yaw = np.pi / 4
+trailer_centre = (trailer_pos[0] + trailer_img_size[0] * 0.33, trailer_pos[1] + trailer_img_size[1] * 0.53)
+
+# DRIVING MODES
 throttle_bar_width = 200
 throttle_bar_height = 20
 throttle_bar_position = (screen_width // 2 - throttle_bar_width // 2, 700)
@@ -185,6 +191,8 @@ steering_bar_width = 200
 steering_bar_height = 20
 steering_bar_position = (screen_width // 2 - steering_bar_width // 2, 750)
 driving_mode_position = (screen_width // 2 - steering_bar_width // 2, 650)
+
+# VEL PROFILES
 vel_prof_height = 150
 vel_prof_width = 300
 lin_vel_prof_pos = (50, 0)
@@ -342,8 +350,19 @@ class BlueBoat(object):
     
     def is_in_trailer(self,x,y):
         boat_centre = self.to_screen(x,y)
-        theta_threshold = np.pi / 16 # 10 degrees # TODO add trailer_yaw
-        return boat_centre[0] > trailer_centre[0] - trailer_threshold[0] and boat_centre[0] < trailer_centre[0] + trailer_threshold[0] and boat_centre[1] > trailer_centre[1] - trailer_threshold[1] and boat_centre[1] < trailer_centre[1] + trailer_threshold[1] and abs(minangle(self.x[2] - trailer_yaw)) < theta_threshold
+        theta_threshold = np.pi / 18 # 10 degrees
+
+        # Rotate boat coordinates relative to the trailer's yaw angle
+        rotated_x = (boat_centre[0] - trailer_centre[0]) * np.cos(trailer_yaw) - (boat_centre[1] - trailer_centre[1]) * np.sin(trailer_yaw)
+        rotated_y = (boat_centre[0] - trailer_centre[0]) * np.sin(trailer_yaw) + (boat_centre[1] - trailer_centre[1]) * np.cos(trailer_yaw)
+
+        # Check if the rotated boat coordinates are within the specified threshold around the trailer
+        return (
+            rotated_x > -trailer_threshold[0] and rotated_x < trailer_threshold[0] and
+            rotated_y > -trailer_threshold[1] and rotated_y < trailer_threshold[1] and
+            abs(minangle(self.x[2] - trailer_yaw)) < theta_threshold
+        )
+        # return boat_centre[0] > trailer_centre[0] - trailer_threshold[0] and boat_centre[0] < trailer_centre[0] + trailer_threshold[0] and boat_centre[1] > trailer_centre[1] - trailer_threshold[1] and boat_centre[1] < trailer_centre[1] + trailer_threshold[1] and abs(minangle(self.x[2] - trailer_yaw)) < theta_threshold
 
     def blitRotate(self,surf, image, pos, originPos, angle):
 
@@ -395,19 +414,19 @@ class BlueBoat(object):
             bg.blit(outside_map_text, (25, 0))
 
     def display_inside_trailer_info(self, bg):
-        In_Trailer = False
-        # display if the boat is in the trailer or not
-        if self.is_in_trailer(self.x[0], self.x[1]):
-            In_Trailer = True
-            pygame.draw.rect(bg, light_green, (trailer_centre[0] - trailer_threshold[0], trailer_centre[1] - trailer_threshold[1], trailer_threshold[0] * 2, trailer_threshold[1] * 2))
-        else:
-            In_Trailer = False
-            pygame.draw.rect(bg, light_red, (trailer_centre[0] - trailer_threshold[0], trailer_centre[1] - trailer_threshold[1], trailer_threshold[0] * 2, trailer_threshold[1] * 2))
+        rotated_rect = pygame.Surface((trailer_threshold[0] * 2, trailer_threshold[1] * 2), pygame.SRCALPHA)  # Create a transparent surface
         
-        # draw trailer centre
-        if(In_Trailer):
-            pygame.draw.circle(bg, green, trailer_centre, 5)
+
+        # Display if the boat is in the trailer or not
+        if self.is_in_trailer(self.x[0], self.x[1]):
+            pygame.draw.rect(rotated_rect, light_green, (0, 0, trailer_threshold[0] * 2, trailer_threshold[1] * 2), 0)  # Draw the rotated rectangle in green
+            rotated_rect = pygame.transform.rotate(rotated_rect, trailer_yaw * 180.0 / np.pi)  # Rotate the surface
+            bg.blit(rotated_rect, rotated_rect.get_rect(center=trailer_centre))  # Blit the rotated surface onto the background
+            pygame.draw.circle(bg, dark_green, trailer_centre, 5)
         else:
+            pygame.draw.rect(rotated_rect, light_red, (0, 0, trailer_threshold[0] * 2, trailer_threshold[1] * 2), 0)  # Draw the rotated rectangle in green
+            rotated_rect = pygame.transform.rotate(rotated_rect, trailer_yaw * 180.0 / np.pi)  # Rotate the surface
+            bg.blit(rotated_rect, rotated_rect.get_rect(center=trailer_centre))  # Blit the rotated surface onto the background
             pygame.draw.circle(bg, red, trailer_centre, 5)
 
     def display_driving_mode(self, bg):
@@ -577,7 +596,33 @@ class BlueBoat(object):
 
     def get_state(self):
         return self.x
+
+def update_trailer_position():
+    # at random inside the screen - trailer_img_size
+    trailer_pos = [random.randint(0, screen_width - int(trailer_img_size[0])), random.randint(0, screen_height - int(trailer_img_size[1]))]
+    trailer_centre = (trailer_pos[0] + trailer_img_size[0] * 0.33, trailer_pos[1] + trailer_img_size[1] * 0.53)
+    trailer_yaw = random.uniform(-np.pi, np.pi)
+    return trailer_pos, trailer_centre, trailer_yaw
+
+def blitRotate(surf, image, pos, originPos, angle):
+
+    # offset from pivot to center
+    image_rect = image.get_rect(topleft = (pos[0] - originPos[0], pos[1]-originPos[1]))
+    offset_center_to_pivot = pygame.math.Vector2(pos) - image_rect.center
     
+    # rotated offset from pivot to center
+    rotated_offset = offset_center_to_pivot.rotate(-angle)
+
+    # rotated image center
+    rotated_image_center = (pos[0] - rotated_offset.x, pos[1] - rotated_offset.y)
+
+    # get a rotated image
+    rotated_image = pygame.transform.rotate(image, angle)
+    rotated_image_rect = rotated_image.get_rect(center = rotated_image_center)
+
+    # rotate and blit the image
+    surf.blit(rotated_image, rotated_image_rect)
+  
 # The next two are just helper functions for the display.
 # Draw a grid behind the BlueBoat, and the trailer.
 def grid():  
@@ -585,10 +630,11 @@ def grid():
         pygame.draw.lines(background, gray, False, [(x, 0), (x, screen_height)])
         for y in range(50, screen_height, 50):
             pygame.draw.lines(background, gray, False, [(0, y), (screen_width, y)])
-    background.blit(trailer_img,trailer_pos)
+    # display the trailer_img with a rotation equal to trailer_yaw around trailer_centre
+    blitRotate(background, trailer_img, trailer_centre, (int(trailer_img_size[0] * 0.33), int(trailer_img_size[1] * 0.53)), trailer_yaw * 180.0 / np.pi)
  
 # Clean up the screen and draw a fresh grid and the BlueBoat with its latest state coordinates
-def redraw(): 
+def redraw(timer): 
     background.fill(white)
     grid()
     boat.display_inside_trailer_info(background)
@@ -606,6 +652,9 @@ def redraw():
         boat.draw_velocity_profiles(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
+    if timer % max_timer > 0.75 * max_timer:
+        pos_change_warning = font.render("Trailer position will change in " + str(max_timer - timer % max_timer), True, black)
+        background.blit(pos_change_warning, (screen_width - 500, 0))
 
     pygame.display.update()
         # Flip the display
@@ -654,10 +703,15 @@ angular_integral = 0
 previous_linear_error = 0
 previous_angular_error = 0
 
+timer = 0
+max_timer = 1000
 
 while not Done:
     #clock.tick(30)             # GUI refresh rate
-                     
+   
+    if timer % max_timer == 0:
+        trailer_pos, trailer_centre, trailer_yaw = update_trailer_position()
+        
     for event in pygame.event.get():
     #if False:
         if event.type == pygame.QUIT:                    
@@ -729,6 +783,8 @@ while not Done:
         boat.add_to_velocity_profiles(state[2], state[3], state[4], state[5])
         #print(state)
 
-    redraw()
+    redraw(timer)
+
+    timer += 1
  
 pygame.quit()
