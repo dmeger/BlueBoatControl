@@ -652,7 +652,7 @@ class BlueBoat(object):
 
 def update_trailer_position():
     # at random inside the screen - trailer_img_size
-    image_threshold = 300
+    image_threshold = 150
     trailer_pos = [random.randint(image_threshold, screen_width - int(image_threshold)), random.randint(image_threshold, screen_height - int(image_threshold))]
     trailer_centre = (trailer_pos[0] + trailer_img_size[0] * 0.33, trailer_pos[1] + trailer_img_size[1] * 0.53)
     trailer_yaw = random.uniform(-np.pi, np.pi)
@@ -762,15 +762,20 @@ previous_linear_error = 0
 previous_angular_error = 0
 
 timer = 0
-max_timer = 1000
+max_timer = 2000
+max_trailer_timer = 100
+trailer_timer = 0
+in_trailer = False
 
 while not Done:
     #clock.tick(30)             # GUI refresh rate
    
-    if timer % max_timer == 0:
+    if timer % max_timer == 0 or trailer_timer > max_trailer_timer:
         trailer_pos, trailer_centre, trailer_yaw, trailer_approach_pt_1, trailer_approach_pt_0 = update_trailer_position()
         TFS = 0
         timer = 0
+        trailer_timer = 0
+        in_trailer = False
         
     for event in pygame.event.get():
     #if False:
@@ -788,6 +793,7 @@ while not Done:
             if event.key == pygame.K_t:         # "t" key toggles auto trailer following
                 Trailer_Following = not Trailer_Following
                 TFS = 0
+                in_trailer = False
             if event.key == pygame.K_v:         # "v" key toggles velocity profiles
                 Hide_Vel_Prof = not Hide_Vel_Prof
             if event.key == pygame.K_c:         # holding "c" key toggles continuous control
@@ -799,6 +805,7 @@ while not Done:
                 current_waypoint_index = 0
                 path_history = []
                 TFS = 0
+                in_trailer = False
             if event.key == pygame.K_UP:
                 control[0] = control[0]+LINACCEL_INCR
             if event.key == pygame.K_DOWN:
@@ -880,6 +887,12 @@ while not Done:
                 else:
                     clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
                 control = [clamped_throttle, clamped_steering]
+                if boat.is_in_trailer_with_yaw(state[0], state[1], state[2]):
+                    if in_trailer == False:
+                        in_trailer = True
+                        trailer_timer = 0
+                    else:
+                        trailer_timer += 1
         elif throttle != 0 or steering != 0:
             clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
             control = [clamped_throttle, clamped_steering]
