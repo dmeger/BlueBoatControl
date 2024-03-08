@@ -21,7 +21,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
     eval_env = gym.make(env_name, X0=x0)
     # eval_env.seed(seed + 100)
 
-    max_timesteps = 10000
+    max_timesteps = 50000
     avg_reward = 0.
     for i in range(eval_episodes):
         # state, done = eval_env.reset(), False
@@ -37,8 +37,8 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
             # state, reward, done, _ = eval_env.step(action)
             # print(action)
             observation, reward, done, truncated, info = eval_env.step(action)
-            s = observation["state"]
-            boat_pos = s[:2]
+            state = observation["state"]
+            boat_pos = state[:2]
             # print(boat_pos)
             eval_env.render()            
             # print("reward: ", reward)
@@ -46,7 +46,8 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
             avg_reward += reward
             count += 1
             is_inside = eval_env.is_inside_map(boat_pos[0], boat_pos[1])
-            if count >= max_timesteps or (not is_inside):
+            # if count >= max_timesteps or (not is_inside):
+            if count >= max_timesteps:
                 done = True
 
     avg_reward /= eval_episodes
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--start_timesteps", default=25e3, type=int)# Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=5e3, type=int)       # How often (time steps) we evaluate
-    parser.add_argument("--max_timesteps", default=1e5, type=int)   # Max time steps to run environment
+    parser.add_argument("--max_timesteps", default=1e6, type=int)   # Max time steps to run environment
     parser.add_argument("--expl_noise", default=0.1, type=float)    # Std of Gaussian exploration noise
     parser.add_argument("--batch_size", default=256, type=int)      # Batch size for both actor and critic
     parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
@@ -82,13 +83,11 @@ if __name__ == "__main__":
     print(f"Policy: {args.policy}, Env: {args.env}, Seed: {args.seed}")
     print("---------------------------------------")
 
-# =============================================================================
-#     if not os.path.exists("./results"):
-#         os.makedirs("./results")
-# 
-#     if args.save_model and not os.path.exists("./models"):
-#         os.makedirs("./models")
-# =============================================================================
+    if not os.path.exists("./results"):
+        os.makedirs("./results")
+
+    if args.save_model and not os.path.exists("./models"):
+        os.makedirs("./models")
 
     # env = gym.make(args.env)
     x0 = [0,0,0,0,0,0] 
@@ -192,9 +191,7 @@ if __name__ == "__main__":
             episode_num += 1 
 
         # Evaluate episode
-# =============================================================================
-#         if (t + 1) % args.eval_freq == 0:
-#             evaluations.append(eval_policy(policy, args.env, args.seed))
-#             np.save(f"./results/{file_name}", evaluations)
-#             if args.save_model: policy.save(f"./models/{file_name}")
-# =============================================================================
+        if (t + 1) % args.eval_freq == 0:
+            evaluations.append(eval_policy(policy, args.env, args.seed))
+            np.save(f"./results/{file_name}", evaluations)
+            if args.save_model: policy.save(f"./models/{file_name}")

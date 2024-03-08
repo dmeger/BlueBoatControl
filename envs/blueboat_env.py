@@ -38,62 +38,6 @@ from .blueboat_model import BlueBoatModel
 # goal = np.array([ 0, 0, 0, np.pi ])     # This is where we want to end up. Perfectly at the centre
                                         # of the screen, with the boat pointing to the right.
 
-# After this is all the code to run the BlueBoat physics, draw it on the screen, etc. 
-# You should not have to change anything below this, but are encouraged to read and understand
-# as much as possible.
-
-# VARIABLES FOR GUI/INTERACTION
-# screen_width, screen_height = 800, 800   # set the width and height of the window
-                           # (you can increase or decrease if you want to, just remind to keep even numbers)
-# Done = False                # if True,out of while loop, and close pygame
-# Pause = False               # when True, freeze the boat. This is 
-                            # for debugging purposes
- 
-#COLORS
-# =============================================================================
-# white = (255,255,255)
-# black = (0,0,0)
-# gray = (150, 150, 150)
-# Dark_red = (150, 0, 0)
-# radius = 20
-# coord_to_screen_scaling = 100.0
-# boat_img_size = (100,49)
-# trailer_img_size = (300,125)
-# trailer_pos = (400,100)
-# 
-# LINACCEL = 4.0
-# JOY_MAX_LIN_ACCEL = 16.0
-# ROTACCEL = 2.0
-# JOY_MAX_ROT_ACCEL = 8.0
-# control = [0,0]
-# 
-# TRAILER_LEFT_X = 0
-# TRAILER_LEFT_Y = 0
-# TRAILER_RIGHT_X = 4
-# TRAILER_RIGHT_Y = 2
-# TRAILER_HEIGHT = 0.2
-# TRAILER_WIDTH = 0.1
-# joystick=0
-# =============================================================================
-# =============================================================================
-# pygame.init()
-# pygame.display.set_caption("BlueBoat Control") # set the title of the window
-# =============================================================================
-# =============================================================================
-# pygame.joystick.init() # initialize the joystick
-# joystick = pygame.joystick.Joystick(0) # create a joystick object
-# joystick.init() # initialize the joystick
-# =============================================================================
-# background = pygame.display.set_mode((screen_width, screen_height))
-#clock = pygame.time.Clock()
-# =============================================================================
-# pygame.init()
-# pygame.display.set_caption("BlueBoat Control") # set the title of the window
-# background = pygame.display.set_mode((screen_width, screen_height))
-# boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
-# trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
-# =============================================================================
-
 # reward model for blue boat
 class BlueBoatReward(object):
     def __init__(self, boat_pos, trailer_pos):  
@@ -126,8 +70,8 @@ class BlueBoat(gym.Env):
         self.X0 = np.array(X0,dtype=np.float32).flatten()
         self.x = self.X0
         self.t = 0.0
-        #self.trailer_pos = (400,100) # It's in pixels!
-        self.trailer_pos = (500,50)
+        self.trailer_pos = (400,100) # It's in pixels!
+        #self.trailer_pos = (500,50)
         self.x0 = np.array([0,0,0,0,0,0], dtype=np.float32)
         self.goal = np.array([ 0, 0, 0, np.pi ], dtype=np.float32)
         self.screen_width = 800
@@ -152,6 +96,9 @@ class BlueBoat(gym.Env):
         self.TRAILER_HEIGHT = 0.2
         self.TRAILER_WIDTH = 0.1
         self.joystick=0.0
+        self.trailer_centre = (self.trailer_pos[0] + self.trailer_img_size[0] * 0.33, 
+                               self.trailer_pos[1] + self.trailer_img_size[1] * 0.53)
+        self.trailer_threshold = (self.trailer_img_size[0] * 0.1, self.trailer_img_size[1] * 0.1)
         
         pygame.init()
         pygame.display.set_caption("BlueBoat Control") # set the title of the window  
@@ -205,7 +152,7 @@ class BlueBoat(gym.Env):
         self.bpos = self.x[:2]
         self.bpos = np.asarray(self.bpos)
         reward = 0.0
-        threshold = 1.0
+        threshold = 0.1 * self.initial_dist
         boundary = 2.0 * self.initial_dist
         diff = self.bpos - self.tpos
         curr_dist = np.linalg.norm(diff, ord=2)
@@ -213,8 +160,7 @@ class BlueBoat(gym.Env):
         # print(self.initial_dist)
         # print(curr_dist)
         
-        # reward = 1.0 / curr_dist
-        if abs(curr_dist) <= threshold:
+        if self.is_in_trailer(self.bpos[0], self.bpos[1]):
             reward = 1.0
         elif abs(curr_dist) >= boundary:
             reward = -10.0
@@ -222,10 +168,9 @@ class BlueBoat(gym.Env):
             if self.initial_dist <= curr_dist:
                 reward = -0.01
             else:
-                reward = 1.0 / curr_dist
+                # prevent reward from zero division
+                reward = 1.0 / (curr_dist + 1.0)
                 # reward = 0.01
-        # reward = e^(-x)
-        # reward = np.exp(-x)
         return reward
 
     # Convenience function. Allows for quickly resetting back to the initial state to
@@ -260,6 +205,16 @@ class BlueBoat(gym.Env):
         boat_centre2 = self.to_screen(x,y)
         # print(boat_centre2)
         return boat_centre2[0] > 0 and boat_centre2[0] < self.screen_width and boat_centre2[1] > 0 and boat_centre2[1] < self.screen_height
+    
+    def is_in_trailer(self,x,y):
+        boat_centre = self.to_screen(x,y)
+        theta_threshold = np.pi / 18 # 10 degrees # TODO add trailer_yaw
+        isin = ((boat_centre[0] > self.trailer_centre[0] - self.trailer_threshold[0]) and 
+               (boat_centre[0] < self.trailer_centre[0] + self.trailer_threshold[0]) and 
+               (boat_centre[1] > self.trailer_centre[1] - self.trailer_threshold[1]) and 
+               (boat_centre[1] < self.trailer_centre[1] + self.trailer_threshold[1]))
+        return isin
+
 
     def blitRotate(self, surf, image, pos, originPos, angle):
 
@@ -432,7 +387,8 @@ class BlueBoat(gym.Env):
         reward = self.get_reward()
         reward = float(reward)
         done = False
-        if reward >= 1.0:
+        # if reward >= 1.0:
+        if self.is_in_trailer(self.x[0], self.x[1]):
             done = True
         truncated = False
         info = {"t": self.t, "action": self.u}
