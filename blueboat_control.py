@@ -77,19 +77,50 @@ def computePIDControl(state, goalWP, linear_integral, angular_integral, previous
     angular_derivative = angular_error - previous_angular_error
     # compute the linear and angular control inputs
     linear_control = (Kp_lin * linear_error + Ki_lin * linear_integral + Kd_lin * linear_derivative) * pow(1 - abs(angular_error / np.pi), 8) # the linear control is multiplied by 1 - abs(angular_error / np.pi) to reduce the linear control when the angular error is large
-    angular_control = Kp_ang * angular_error + Ki_ang * angular_integral + Kd_ang * angular_derivative
+    angular_control = (Kp_ang * angular_error + Ki_ang * angular_integral + Kd_ang * angular_derivative)
     # store the current linear and angular errors for the next iteration
     previous_linear_error = linear_error
     previous_angular_error = angular_error
     # return the linear and angular control inputs
     return linear_control, angular_control, linear_integral, angular_integral, previous_linear_error, previous_angular_error
 
+def computePIDAngleControl(state, goal_yaw, angular_integral, previous_angular_error):
+    # PID control
+    Kp_ang = 20
+    Ki_ang = 0.01
+    Kd_ang = 80
+    # compute angular error as the difference between the goal angle and the current boat angle
+    angular_error = goal_yaw - state[2]
+    # make sure the angular error is between -pi and pi
+    angular_error = minangle(angular_error)
+    # compute the integral of the angular error
+    angular_integral += angular_error
+    # anti-windup
+    MAX_INTEGRAL_VALUE = 10
+    if angular_integral > MAX_INTEGRAL_VALUE:
+        angular_integral = MAX_INTEGRAL_VALUE
+    if angular_integral < -MAX_INTEGRAL_VALUE:
+        angular_integral = -MAX_INTEGRAL_VALUE
+    # compute the derivative of the angular error
+    angular_derivative = angular_error - previous_angular_error
+    # compute the angular control input
+    angular_control = (Kp_ang * angular_error + Ki_ang * angular_integral + Kd_ang * angular_derivative)
+    # store the current angular error for the next iteration
+    previous_angular_error = angular_error
+    # return the angular control input
+    return angular_control, angular_integral, previous_angular_error
+
 def waypointReached(state, goalWP, current_waypoint_index):
     # If the boat is within a certain distance of the current waypoint, move on to the next waypoint
-    if np.linalg.norm(goalWP - state[0:2]) < 0.75:
-        print("Waypoint ", current_waypoint_index, " reached.")
+    if pointReached(state, goalWP, 0.75):
         current_waypoint_index += 1
     return current_waypoint_index
+
+def pointReached(state, goalWP, threshold = 0.5):
+    # If the boat is within a certain distance of the goal, return True
+    if np.linalg.norm(goalWP - state[0:2]) < threshold:
+        return True
+    return False
 
 def computeJoystickControl(throttle, steering):
      # Update driving mode based on user input
@@ -157,6 +188,8 @@ Auto_Control = False        # when True, the boat will follow the spiral path
 Continuous_Control = False  # when True, the boat will be controlled continuously in Auto_Control mode
                             # when False, the boat will be controlled discretely in Auto_Control mode
 Hide_Vel_Prof = True       # when True, the velocity profiles will not be displayed
+Trailer_Following = False  # when True, the boat will follow the trailer
+TFS = 0                    # Trailer Following State
 
 #COLORS
 white = (255,255,255)
@@ -181,7 +214,11 @@ trailer_img_size = (300*1.15,125*1.15)
 trailer_threshold = (trailer_img_size[0] * 0.1, trailer_img_size[1] * 0.1)
 trailer_pos = [400,100]
 trailer_yaw = np.pi / 4
+trailer_approach_dist = trailer_img_size[0] * 0.2
 trailer_centre = (trailer_pos[0] + trailer_img_size[0] * 0.33, trailer_pos[1] + trailer_img_size[1] * 0.53)
+trailer_approach_pt_1 = (int(trailer_centre[0] + trailer_approach_dist * np.cos(trailer_yaw)), int(trailer_centre[1] + trailer_approach_dist * np.sin(trailer_yaw)))
+trailer_approach_pt_0 = (int(trailer_centre[0] + 2 * trailer_approach_dist * np.cos(trailer_yaw)), int(trailer_centre[1] + 2 * trailer_approach_dist * np.sin(trailer_yaw)))
+# approach point is located at the centre of the trailer, 50 pixels away from the trailer in the direction of the trailer's yaw angle
 
 # DRIVING MODES
 throttle_bar_width = 200
@@ -350,8 +387,7 @@ class BlueBoat(object):
     
     def is_in_trailer(self,x,y):
         boat_centre = self.to_screen(x,y)
-        theta_threshold = np.pi / 18 # 10 degrees
-
+        
         # Rotate boat coordinates relative to the trailer's yaw angle
         rotated_x = (boat_centre[0] - trailer_centre[0]) * np.cos(trailer_yaw) - (boat_centre[1] - trailer_centre[1]) * np.sin(trailer_yaw)
         rotated_y = (boat_centre[0] - trailer_centre[0]) * np.sin(trailer_yaw) + (boat_centre[1] - trailer_centre[1]) * np.cos(trailer_yaw)
@@ -359,10 +395,12 @@ class BlueBoat(object):
         # Check if the rotated boat coordinates are within the specified threshold around the trailer
         return (
             rotated_x > -trailer_threshold[0] and rotated_x < trailer_threshold[0] and
-            rotated_y > -trailer_threshold[1] and rotated_y < trailer_threshold[1] and
-            abs(minangle(self.x[2] - trailer_yaw)) < theta_threshold
+            rotated_y > -trailer_threshold[1] and rotated_y < trailer_threshold[1]
         )
-        # return boat_centre[0] > trailer_centre[0] - trailer_threshold[0] and boat_centre[0] < trailer_centre[0] + trailer_threshold[0] and boat_centre[1] > trailer_centre[1] - trailer_threshold[1] and boat_centre[1] < trailer_centre[1] + trailer_threshold[1] and abs(minangle(self.x[2] - trailer_yaw)) < theta_threshold
+    
+    def is_in_trailer_with_yaw(self,x,y,yaw):
+        theta_threshold = np.pi / 18 # 10 degrees
+        return self.is_in_trailer(x,y) and abs(minangle(trailer_yaw - yaw)) < theta_threshold
 
     def blitRotate(self,surf, image, pos, originPos, angle):
 
@@ -416,18 +454,33 @@ class BlueBoat(object):
     def display_inside_trailer_info(self, bg):
         rotated_rect = pygame.Surface((trailer_threshold[0] * 2, trailer_threshold[1] * 2), pygame.SRCALPHA)  # Create a transparent surface
         
-
         # Display if the boat is in the trailer or not
-        if self.is_in_trailer(self.x[0], self.x[1]):
+        if self.is_in_trailer_with_yaw(self.x[0], self.x[1], self.x[2]):
             pygame.draw.rect(rotated_rect, light_green, (0, 0, trailer_threshold[0] * 2, trailer_threshold[1] * 2), 0)  # Draw the rotated rectangle in green
             rotated_rect = pygame.transform.rotate(rotated_rect, trailer_yaw * 180.0 / np.pi)  # Rotate the surface
             bg.blit(rotated_rect, rotated_rect.get_rect(center=trailer_centre))  # Blit the rotated surface onto the background
-            pygame.draw.circle(bg, dark_green, trailer_centre, 5)
         else:
             pygame.draw.rect(rotated_rect, light_red, (0, 0, trailer_threshold[0] * 2, trailer_threshold[1] * 2), 0)  # Draw the rotated rectangle in green
             rotated_rect = pygame.transform.rotate(rotated_rect, trailer_yaw * 180.0 / np.pi)  # Rotate the surface
             bg.blit(rotated_rect, rotated_rect.get_rect(center=trailer_centre))  # Blit the rotated surface onto the background
+        
+        if self.is_in_trailer(self.x[0], self.x[1]):
+            pygame.draw.circle(bg, dark_green, trailer_centre, 5)
+        else:
             pygame.draw.circle(bg, red, trailer_centre, 5)
+
+        if TFS == 0:
+            pygame.draw.circle(bg, light_red, trailer_approach_pt_0, 5)
+            pygame.draw.circle(bg, light_red, trailer_approach_pt_1, 5)
+        elif TFS == 1:
+            pygame.draw.circle(bg, light_red, trailer_approach_pt_1, 5)
+            pygame.draw.circle(bg, light_green, trailer_approach_pt_0, 5)
+        elif TFS == 2:
+            pygame.draw.circle(bg, light_green, trailer_approach_pt_0, 5)
+            pygame.draw.circle(bg, light_green, trailer_approach_pt_1, 5)
+        else:
+            pygame.draw.circle(bg, light_green, trailer_approach_pt_0, 5)
+            pygame.draw.circle(bg, light_green, trailer_approach_pt_1, 5)
 
     def display_driving_mode(self, bg):
         # Display mode text in different colors based on the mode. Green background for forward, red background for reverse, blue background for neutral, black background for continuous, white background for undefined
@@ -545,7 +598,7 @@ class BlueBoat(object):
     
     def add_to_path_history(self, x, y):
         path_history.append((x, y))
-        if(len(path_history) > 2000):
+        if(len(path_history) > 500):
             path_history.pop(0)
 
     def display_path_history(self, bg):
@@ -599,10 +652,13 @@ class BlueBoat(object):
 
 def update_trailer_position():
     # at random inside the screen - trailer_img_size
-    trailer_pos = [random.randint(0, screen_width - int(trailer_img_size[0])), random.randint(0, screen_height - int(trailer_img_size[1]))]
+    image_threshold = 300
+    trailer_pos = [random.randint(image_threshold, screen_width - int(image_threshold)), random.randint(image_threshold, screen_height - int(image_threshold))]
     trailer_centre = (trailer_pos[0] + trailer_img_size[0] * 0.33, trailer_pos[1] + trailer_img_size[1] * 0.53)
     trailer_yaw = random.uniform(-np.pi, np.pi)
-    return trailer_pos, trailer_centre, trailer_yaw
+    trailer_approach_pt_1 = ((trailer_centre[0] - trailer_approach_dist * np.cos(trailer_yaw)), (trailer_centre[1] + trailer_approach_dist * np.sin(trailer_yaw)))
+    trailer_approach_pt_0 = ((trailer_centre[0] - 2 * trailer_approach_dist * np.cos(trailer_yaw)), (trailer_centre[1] + 2 * trailer_approach_dist * np.sin(trailer_yaw)))
+    return trailer_pos, trailer_centre, trailer_yaw, trailer_approach_pt_1, trailer_approach_pt_0
 
 def blitRotate(surf, image, pos, originPos, angle):
 
@@ -652,6 +708,8 @@ def redraw(timer):
         boat.draw_velocity_profiles(background)
      # Draw a solid blue circle in the center
     #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
+    timer_str = font.render("Time: " + str(timer), True, black)
+    background.blit(timer_str, (screen_width - 100, 0))
     if timer % max_timer > 0.75 * max_timer:
         pos_change_warning = font.render("Trailer position will change in " + str(max_timer - timer % max_timer), True, black)
         background.blit(pos_change_warning, (screen_width - 500, 0))
@@ -710,7 +768,9 @@ while not Done:
     #clock.tick(30)             # GUI refresh rate
    
     if timer % max_timer == 0:
-        trailer_pos, trailer_centre, trailer_yaw = update_trailer_position()
+        trailer_pos, trailer_centre, trailer_yaw, trailer_approach_pt_1, trailer_approach_pt_0 = update_trailer_position()
+        TFS = 0
+        timer = 0
         
     for event in pygame.event.get():
     #if False:
@@ -725,16 +785,20 @@ while not Done:
                 Pause = True
             if event.key == pygame.K_a:         # "a" key toggles auto control
                 Auto_Control = not Auto_Control
+            if event.key == pygame.K_t:         # "t" key toggles auto trailer following
+                Trailer_Following = not Trailer_Following
+                TFS = 0
             if event.key == pygame.K_v:         # "v" key toggles velocity profiles
                 Hide_Vel_Prof = not Hide_Vel_Prof
-            if event.key == pygame.K_c:         # holding "c" key enables continuous control
-                Continuous_Control = True
+            if event.key == pygame.K_c:         # holding "c" key toggles continuous control
+                Continuous_Control = not Continuous_Control
             # set the auto path mode with numbers
             if event.key == pygame.K_1 or event.key == pygame.K_2 or event.key == pygame.K_3 or event.key == pygame.K_4 or event.key == pygame.K_5:
                 auto_path_mode = int(event.unicode) - 1
                 path_waypoints = path_drawer.draw_path(auto_path_mode)
                 current_waypoint_index = 0
                 path_history = []
+                TFS = 0
             if event.key == pygame.K_UP:
                 control[0] = control[0]+LINACCEL_INCR
             if event.key == pygame.K_DOWN:
@@ -748,8 +812,6 @@ while not Done:
         if event.type == pygame.KEYUP:          # releasing "p" makes us live again
             if event.key == pygame.K_p:
                 Pause = False
-            if event.key == pygame.K_c:         # releasing "c" key disables continuous control
-                Continuous_Control = False
         if event.type == pygame.JOYAXISMOTION:  # xbox joystick controller control
             if event.axis == THROTTLE_AXIS:     # Left stick vertical axis = throttle
                 throttle = FORWARD_MAX_LIN_ACCEL * joystick.get_axis(THROTTLE_AXIS) * THROTTLE_MULTIPLIER
@@ -774,6 +836,50 @@ while not Done:
                 path_waypoints = path_drawer.draw_path(auto_path_mode)
                 current_waypoint_index = 0
                 path_history = []
+        elif Trailer_Following:
+            if TFS == 0: # to approach point 0
+                goal = boat.from_screen(trailer_approach_pt_0[0], trailer_approach_pt_0[1])
+                throttle, steering, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
+                if Continuous_Control:
+                    clamped_throttle, clamped_steering = throttle, steering
+                    current_mode = CONTINUOUS
+                else:
+                    clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+                control = [clamped_throttle, clamped_steering]
+                if pointReached( state, goal, 0.3):
+                    TFS = 1
+            elif TFS == 1: # to approach point 1
+                goal = boat.from_screen(trailer_approach_pt_1[0], trailer_approach_pt_1[1])
+                throttle, steering, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
+                if Continuous_Control:
+                    clamped_throttle, clamped_steering = throttle, steering
+                    current_mode = CONTINUOUS
+                else:
+                    clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+                control = [clamped_throttle, clamped_steering]
+                if pointReached( state, goal, 0.3):
+                    TFS = 2
+            elif TFS == 2: # to center
+                goal = boat.from_screen(trailer_centre[0], trailer_centre[1])
+                throttle, steering, linear_integral, angular_integral, previous_linear_error, previous_angular_error = computePIDControl( state, goal, linear_integral, angular_integral, previous_linear_error, previous_angular_error )
+                if Continuous_Control:
+                    clamped_throttle, clamped_steering = throttle, steering
+                    current_mode = CONTINUOUS
+                else:
+                    clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+                control = [clamped_throttle, clamped_steering]
+                if boat.is_in_trailer(state[0], state[1]):
+                    TFS = 3
+            elif TFS == 3: # to yaw
+                goal_yaw = trailer_yaw
+                throttle = 0
+                steering, angular_integral, previous_angular_error = computePIDAngleControl( state, goal_yaw, angular_integral, previous_angular_error )
+                if Continuous_Control:
+                    clamped_steering, clamped_throttle = steering, throttle
+                    current_mode = CONTINUOUS
+                else:
+                    clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
+                control = [clamped_throttle, clamped_steering]
         elif throttle != 0 or steering != 0:
             clamped_throttle, clamped_steering, current_mode = computeJoystickControl(throttle, steering)
             control = [clamped_throttle, clamped_steering]
