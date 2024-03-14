@@ -20,7 +20,7 @@ import math
 import numpy as np
 from scipy.integrate import ode
 import clock
-from .blueboat_model import BlueBoatModel
+# from .blueboat_model import BlueBoatModel
 
 # The very basic code you should know and interact with starts here. Sets some variables that you 
 # might change or add to, then defines a function to do control that is currently empty. Add
@@ -106,8 +106,8 @@ class BlueBoat(gym.Env):
         self.boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), self.boat_img_size)
         self.trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), self.trailer_img_size)
         self.model = model
-        if model is None:
-            self.model = BlueBoatModel(self.X0)
+        # if model is None:
+            # self.model = BlueBoatModel(self.X0)
         self.bpos = self.x[:2]
         self.bpos = np.asarray(self.bpos, dtype=np.float32)
         from_trailer_pos = self.from_screen(self.trailer_pos[0], self.trailer_pos[1])
