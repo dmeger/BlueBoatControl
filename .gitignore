@@ -1,2 +1,5 @@
+# Ignore Python cache files
 envs/__pycache__/*
 __pycache__/*
+envs/.DS_Store
+results/*

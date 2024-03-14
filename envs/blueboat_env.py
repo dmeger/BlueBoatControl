@@ -13,20 +13,20 @@ his teaching in RL and Robotics. Please use this freely for any purpose, but ack
 is always welcome.
 '''
 
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import pygame
 import math
 import numpy as np
 from scipy.integrate import ode
 import clock
-from .blueboat_model import BlueBoatModel
+# from .blueboat_model import BlueBoatModel
 
 # The very basic code you should know and interact with starts here. Sets some variables that you 
 # might change or add to, then defines a function to do control that is currently empty. Add
 # more logic in and around that function to make your controller work/learn!
 
-x0 = [0,0,0,0,0,0]                      # This specifies the average starting state               
+# x0 = [0,0,0,0,0,0]                      # This specifies the average starting state               
                                         # The meaning of the state dimensions are 
                                         # state[0] : boat position (x)
                                         # state[1] : boat position (y)
@@ -35,71 +35,22 @@ x0 = [0,0,0,0,0,0]                      # This specifies the average starting st
                                         # state[4] : boat velocity (y)
                                         # state[5] : boat angular velocity (theta_dot)
 
-goal = np.array([ 0, 0, 0, np.pi ])     # This is where we want to end up. Perfectly at the centre
+# goal = np.array([ 0, 0, 0, np.pi ])     # This is where we want to end up. Perfectly at the centre
                                         # of the screen, with the boat pointing to the right.
-
-# TODO: Fill in this function
-def computeControl( x ):
-
-    control = [1,0,0]
-
-    return control
-
-# After this is all the code to run the BlueBoat physics, draw it on the screen, etc. 
-# You should not have to change anything below this, but are encouraged to read and understand
-# as much as possible.
-
-# VARIABLES FOR GUI/INTERACTION
-screen_width, screen_height = 800, 800   # set the width and height of the window
-                           # (you can increase or decrease if you want to, just remind to keep even numbers)
-# Done = False                # if True,out of while loop, and close pygame
-# Pause = False               # when True, freeze the boat. This is 
-                            # for debugging purposes
- 
-#COLORS
-white = (255,255,255)
-black = (0,0,0)
-gray = (150, 150, 150)
-Dark_red = (150, 0, 0)
-radius = 20
-coord_to_screen_scaling = 100.0
-boat_img_size = (100,49)
-trailer_img_size = (300,125)
-trailer_pos = (400,100)
-
-LINACCEL = 4.0
-JOY_MAX_LIN_ACCEL = 16.0
-ROTACCEL = 2.0
-JOY_MAX_ROT_ACCEL = 8.0
-control = [0,0]
-
-TRAILER_LEFT_X = 0
-TRAILER_LEFT_Y = 0
-TRAILER_RIGHT_X = 4
-TRAILER_RIGHT_Y = 2
-TRAILER_HEIGHT = 0.2
-TRAILER_WIDTH = 0.1
-
-#BEFORE STARTING GUI
-joystick=0
-# =============================================================================
-# pygame.init()
-# pygame.display.set_caption("BlueBoat Control") # set the title of the window
-# =============================================================================
-# =============================================================================
-# pygame.joystick.init() # initialize the joystick
-# joystick = pygame.joystick.Joystick(0) # create a joystick object
-# joystick.init() # initialize the joystick
-# =============================================================================
-# background = pygame.display.set_mode((screen_width, screen_height))
-#clock = pygame.time.Clock()
-boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
-trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
 
 # reward model for blue boat
 class BlueBoatReward(object):
-    def __init__(self):  
+    def __init__(self, boat_pos, trailer_pos):  
         super(BlueBoatReward, self).__init__()
+        self.boat_pos = np.asarray(boat_pos)
+        self.trailer_pos = np.asarray(trailer_pos)
+        
+    def reward(self):
+        diff = self.boat_pos - self.trailer_pos
+        x = np.linalg.norm(diff, ord=2)
+        # reward = e^(-x)
+        reward = np.exp(-x)
+        return reward
 
 # A simple class to simulate BlueBoat physics using an ODE solver
 class BlueBoat(gym.Env):
@@ -107,9 +58,7 @@ class BlueBoat(gym.Env):
  
     # State holds x, x_dot, theta_dot, theta (radians)
     def __init__(self, model=None, X0=None):
-        
-        if model is None:
-            model = BlueBoatModel()
+        super(BlueBoat, self).__init__()
         self.g = 9.82
         self.m = 0.5
         self.M = 0.5
@@ -117,14 +66,68 @@ class BlueBoat(gym.Env):
         self.b = 1.0
         self.Done = False                # if True,out of while loop, and close pygame
         self.Pause = False               # when True, freeze the boat. This is 
-
         # self.X0 = self.x = np.array(x0,dtype=np.float64).flatten()
-        self.X0 = np.array(X0,dtype=np.float64).flatten()
+        self.X0 = np.array(X0,dtype=np.float32).flatten()
         self.x = self.X0
-        self.t = 0
-
-        self.u = 0
-
+        self.t = 0.0
+        self.trailer_pos = (400,100) # It's in pixels!
+        #self.trailer_pos = (500,50)
+        self.x0 = np.array([0,0,0,0,0,0], dtype=np.float32)
+        self.goal = np.array([ 0, 0, 0, np.pi ], dtype=np.float32)
+        self.screen_width = 800
+        self.screen_height = 800
+        self.white = (255,255,255)
+        self.black = (0,0,0)
+        self.gray = (150, 150, 150)
+        self.Dark_red = (150, 0, 0)
+        self.radius = 20
+        self.coord_to_screen_scaling = 100.0
+        self.boat_img_size = (100,49)
+        self.trailer_img_size = (300,125)
+        self.LINACCEL = 4.0
+        self.JOY_MAX_LIN_ACCEL = 16.0
+        self.ROTACCEL = 2.0
+        self.JOY_MAX_ROT_ACCEL = 8.0
+        self.control = np.array([0.0,0.0], dtype=np.float32)
+        self.TRAILER_LEFT_X = 0.0
+        self.TRAILER_LEFT_Y = 0.0
+        self.TRAILER_RIGHT_X = 4.0
+        self.TRAILER_RIGHT_Y = 2.0
+        self.TRAILER_HEIGHT = 0.2
+        self.TRAILER_WIDTH = 0.1
+        self.joystick=0.0
+        self.trailer_centre = (self.trailer_pos[0] + self.trailer_img_size[0] * 0.33, 
+                               self.trailer_pos[1] + self.trailer_img_size[1] * 0.53)
+        self.trailer_threshold = (self.trailer_img_size[0] * 0.1, self.trailer_img_size[1] * 0.1)
+        
+        pygame.init()
+        pygame.display.set_caption("BlueBoat Control") # set the title of the window  
+        self.background = pygame.display.set_mode((self.screen_width, self.screen_height))
+        self.boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), self.boat_img_size)
+        self.trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), self.trailer_img_size)
+        self.model = model
+        # if model is None:
+            # self.model = BlueBoatModel(self.X0)
+        self.bpos = self.x[:2]
+        self.bpos = np.asarray(self.bpos, dtype=np.float32)
+        from_trailer_pos = self.from_screen(self.trailer_pos[0], self.trailer_pos[1])
+        self.tpos = np.asarray(from_trailer_pos, dtype=np.float32)
+        self.initial_dist = np.linalg.norm((self.bpos-self.tpos), ord=2)
+        # self.reward_f = BlueBoatReward()
+        
+        high = np.array([10.0, 5.0], dtype=np.float32)
+        self.action_space = spaces.Box(-high, high, dtype=np.float32)     
+        # observation space is the combination of state, action, and trailer position 
+        size_meters = self.from_screen(self.screen_width, self.screen_height)
+        self.grid_shape = np.asarray(size_meters, dtype=np.float32)
+        self.high_s = np.array([self.grid_shape[0], self.grid_shape[1], np.pi, 10, 10, np.pi], dtype=np.float32)
+        self.observation_space = spaces.Dict(
+            {"state": spaces.Box(-self.high_s, self.high_s, shape=(6, ), dtype=np.float32),
+            "action": spaces.Box(-high, high, shape=(2, ), dtype=np.float32),
+            "target": spaces.Box(-self.grid_shape, self.grid_shape, shape=(2, ), dtype=np.float32),
+            })
+        # self.u = 0
+        self.u = np.array([0.0, 0.0], dtype=np.float32)
         # This is a key line that makes this class an accurate version of BlueBoat dynamics.
         # The ODE solver is connected with our instantaneous dynamics equations so it can do 
         # the hard work of computing the motion over time for us.
@@ -135,22 +138,85 @@ class BlueBoat(gym.Env):
     # with the variables used by our ODE solver.
     def set_state(self, x):
         if (self.x is None or np.linalg.norm(x-self.x) > 1e-12):
-            self.x = np.array(x,dtype=np.float64).flatten()
+            self.x = np.array(x,dtype=np.float32).flatten()
         self.solver = self.solver.set_initial_value(self.x)
         self.t = self.solver.t
+        
+    def get_state(self):
+        return self.x
+    
+    def get_obs(self):
+        return {"state": self.x, "action": self.u, "target": self.tpos}
+    
+    def get_reward(self):
+        self.bpos = self.x[:2]
+        self.bpos = np.asarray(self.bpos)
+        reward = 0.0
+        threshold = 0.1 * self.initial_dist
+        boundary = 2.0 * self.initial_dist
+        diff = self.bpos - self.tpos
+        curr_dist = np.linalg.norm(diff, ord=2)
+        
+        # print(self.initial_dist)
+        # print(curr_dist)
+        
+        if self.is_in_trailer(self.bpos[0], self.bpos[1]):
+            reward = 1.0
+        elif abs(curr_dist) >= boundary:
+            reward = -10.0
+        else:
+            if self.initial_dist <= curr_dist:
+                reward = -0.01
+            else:
+                # prevent reward from zero division
+                reward = 1.0 / (curr_dist + 1.0)
+                # reward = 0.01
+        return reward
 
     # Convenience function. Allows for quickly resetting back to the initial state to
     # get a clearer view of how the control works.
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        
         self.x = self.X0
-        self.t = 0
+        self.t = 0.0
         self.set_state(self.x)
-
+        
+        obs = self.get_obs()
+        state = self.get_state()
+        reward = self.get_reward()
+        info = {"t": self.t, "action": self.u}
+        # return obs, state, reward, info
+        
+        # print(obs)
+        # print(info)
+        
+        return obs, info
 
     def to_screen(self,x,y):
-        return (int(screen_width/2+x*coord_to_screen_scaling),int(screen_height/2+y*coord_to_screen_scaling))
+        return (int(self.screen_width/2+x*self.coord_to_screen_scaling),
+                int(self.screen_height/2+y*self.coord_to_screen_scaling))
+    
+    def from_screen(self,x,y):
+        return ((x-self.screen_width/2)/self.coord_to_screen_scaling,
+                (y-self.screen_height/2)/self.coord_to_screen_scaling)
+    
+    def is_inside_map(self,x,y):
+        boat_centre2 = self.to_screen(x,y)
+        # print(boat_centre2)
+        return boat_centre2[0] > 0 and boat_centre2[0] < self.screen_width and boat_centre2[1] > 0 and boat_centre2[1] < self.screen_height
+    
+    def is_in_trailer(self,x,y):
+        boat_centre = self.to_screen(x,y)
+        theta_threshold = np.pi / 18 # 10 degrees # TODO add trailer_yaw
+        isin = ((boat_centre[0] > self.trailer_centre[0] - self.trailer_threshold[0]) and 
+               (boat_centre[0] < self.trailer_centre[0] + self.trailer_threshold[0]) and 
+               (boat_centre[1] > self.trailer_centre[1] - self.trailer_threshold[1]) and 
+               (boat_centre[1] < self.trailer_centre[1] + self.trailer_threshold[1]))
+        return isin
 
-    def blitRotate(self,surf, image, pos, originPos, angle):
+
+    def blitRotate(self, surf, image, pos, originPos, angle):
 
         # offset from pivot to center
         image_rect = image.get_rect(topleft = (pos[0] - originPos[0], pos[1]-originPos[1]))
@@ -170,38 +236,43 @@ class BlueBoat(gym.Env):
         surf.blit(rotated_image, rotated_image_rect)
 
     # Draw the boat
-    def draw(self, bg):  
+    def draw(self, bg, boat_img, trailer_img):  
         boat_rad = 20.0
         boat_centre = self.to_screen(self.x[0],self.x[1])
+        #boat_centre = (self.x[0],self.x[1])
         
         #boat_direction = (int(boat_centre[0]+boat_rad*np.cos(self.x[2])),int(boat_centre[1]+boat_rad*np.sin(self.x[2])))
         #pygame.draw.circle(bg, Dark_red, boat_centre, radius - 2)
         #pygame.draw.lines(bg, black, False, [boat_centre, boat_direction], 2)
 
-        self.blitRotate(bg,boat_img,boat_centre,(int(boat_img_size[0]/2),int(boat_img_size[1]/2)),self.x[2]*180.0/np.pi)
+        self.blitRotate(bg,boat_img,boat_centre,(int(self.boat_img_size[0]/2),
+                                                 int(self.boat_img_size[1]/2)),self.x[2]*180.0/np.pi)
 
-        boat_motor = (int(boat_centre[0]-boat_img_size[0]/2*np.cos(self.x[2])),int(boat_centre[1]+boat_img_size[0]/2*np.sin(self.x[2])))
-        linear_thrust_arrow = (int(boat_motor[0]-self.u[0]*np.cos(self.x[2])),int(boat_motor[1]+self.u[0]*np.sin(self.x[2])))
-        angular_thrust_arrow = (int(boat_motor[0]-5*self.u[1]*np.sin(self.x[2])),int(boat_motor[1]-5*self.u[1]*np.cos(self.x[2])))
-        pygame.draw.lines(bg, Dark_red, False, [boat_motor, linear_thrust_arrow], 2)
-        pygame.draw.lines(bg, Dark_red, False, [boat_motor, angular_thrust_arrow], 2)
+        boat_motor = (int(boat_centre[0]-self.boat_img_size[0]/2*np.cos(self.x[2])),
+                      int(boat_centre[1]+self.boat_img_size[0]/2*np.sin(self.x[2])))
+        linear_thrust_arrow = (int(boat_motor[0]-self.u[0]*np.cos(self.x[2])),
+                               int(boat_motor[1]+self.u[0]*np.sin(self.x[2])))
+        angular_thrust_arrow = (int(boat_motor[0]-5*self.u[1]*np.sin(self.x[2])),
+                                int(boat_motor[1]-5*self.u[1]*np.cos(self.x[2])))
+        pygame.draw.lines(bg, self.Dark_red, False, [boat_motor, linear_thrust_arrow], 2)
+        pygame.draw.lines(bg, self.Dark_red, False, [boat_motor, angular_thrust_arrow], 2)
 
         #pygame.draw.rect(bg,black,pygame.Rect(self.to_screen(self.TRAILER_LEFT_X,self.TRAILER_LEFT_Y),(self.TRAILER_HEIGHT*coord_to_screen_scaling,self.TRAILER_WIDTH*coord_to_screen_scaling)))
 
     # The next two are just helper functions for the display.
     # Draw a grid behind the BlueBoat, and the trailer.
-    def grid(self, background):  
-        for x in range(50, screen_width, 50):
-            pygame.draw.lines(background, gray, False, [(x, 0), (x, screen_height)])
-            for y in range(50, screen_height, 50):
-                pygame.draw.lines(background, gray, False, [(0, y), (screen_width, y)])
-        background.blit(trailer_img,trailer_pos)
+    def grid(self, background, boat_img, trailer_img):  
+        for x in range(50, self.screen_width, 50):
+            pygame.draw.lines(background, self.gray, False, [(x, 0), (x, self.screen_height)])
+            for y in range(50, self.screen_height, 50):
+                pygame.draw.lines(background, self.gray, False, [(0, y), (self.screen_width, y)])
+        background.blit(trailer_img, self.trailer_pos)
      
     # Clean up the screen and draw a fresh grid and the BlueBoat with its latest state coordinates
-    def redraw(self, background): 
-        background.fill(white)
-        self.grid(background)
-        self.draw(background)
+    def redraw(self, background, boat_img, trailer_img): 
+        background.fill(self.white)
+        self.grid(background, boat_img, trailer_img)
+        self.draw(background, boat_img, trailer_img)
          # Draw a solid blue circle in the center
         #pygame.draw.circle(background, (0, 0, 255), (250, 250), 75)
         pygame.display.update()
@@ -209,54 +280,54 @@ class BlueBoat(gym.Env):
         pygame.display.flip()
 
     def render(self):
-        pygame.init()
-        pygame.display.set_caption("BlueBoat Control") # set the title of the window
-        background = pygame.display.set_mode((screen_width, screen_height))
+        # pygame.init()
+        # pygame.display.set_caption("BlueBoat Control") # set the title of the window
+        # background = pygame.display.set_mode((self.screen_width, self.screen_height))
         #clock = pygame.time.Clock()
         # boat_img = pygame.transform.smoothscale( pygame.image.load("../img/bb.png").convert_alpha(), boat_img_size)
         # trailer_img = pygame.transform.smoothscale( pygame.image.load("../img/trailer.png").convert_alpha(), trailer_img_size)
+        # pygame.init()
+        # pygame.display.set_caption("BlueBoat Control") # set the title of the window
         
-        while not self.Done:
+        # while not self.Done:
             #clock.tick(30)             # GUI refresh rate
                              
-            for event in pygame.event.get():
-            #if False:
-                if event.type == pygame.QUIT:                    
-                    self.Done = True                                   
-                if event.type == pygame.KEYDOWN:    # keyboard control
-                    if event.key == pygame.K_r:     # "r" key resets the simulator
-                        control = [0,0]
-                        boat.reset()
-                    if event.key == pygame.K_p:     # holding "p" key freezes time
-                        self.Pause = True
-                    if event.key == pygame.K_UP:
-                        control[0] = control[0]+LINACCEL
-                    if event.key == pygame.K_DOWN:
-                        control[0] = control[0]-LINACCEL
-                    if event.key == pygame.K_RIGHT:
-                        control[1] = control[1]-ROTACCEL
-                    if event.key == pygame.K_LEFT:
-                        control[1] = control[1]+ROTACCEL    
-                    if event.key == pygame.K_q:
-                        self.Done = True
-                if event.type == pygame.KEYUP:      # releasing "p" makes us live again
-                    if event.key == pygame.K_p:
-                        self.Pause = False
-                if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
-                    if event.axis == 1:  # Left stick vertical axis = throttle
-                        control[0] = JOY_MAX_LIN_ACCEL * -joystick.get_axis(1)
-                    if event.axis == 2:  # Right stick horizontal axis = steering 
-                        control[1] = JOY_MAX_ROT_ACCEL * -joystick.get_axis(2)
-                    
-            if not self.Pause:
-                #print(control)
-                #control = computeControl( state )  # This is the call to the code you write
-                state = boat.step(control)
-                #print(state)
+        for event in pygame.event.get():
+        #if False:
+            if event.type == pygame.QUIT:                    
+                self.Done = True                                   
+            if event.type == pygame.KEYDOWN:    # keyboard control
+                if event.key == pygame.K_r:     # "r" key resets the simulator
+                    self.control = [0,0]
+                    # boat.reset()
+                    self.reset()
+                if event.key == pygame.K_p:     # holding "p" key freezes time
+                    self.Pause = True
+                if event.key == pygame.K_UP:
+                    self.control[0] = self.control[0]+self.LINACCEL
+                if event.key == pygame.K_DOWN:
+                    self.control[0] = self.control[0]-self.LINACCEL
+                if event.key == pygame.K_RIGHT:
+                    self.control[1] = self.control[1]-self.ROTACCEL
+                if event.key == pygame.K_LEFT:
+                    self.control[1] = self.control[1]+self.ROTACCEL    
+                if event.key == pygame.K_q:
+                    self.Done = True
+            if event.type == pygame.KEYUP:      # releasing "p" makes us live again
+                if event.key == pygame.K_p:
+                    self.Pause = False
+            if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
+                if event.axis == 1:  # Left stick vertical axis = throttle
+                    self.control[0] = self.JOY_MAX_LIN_ACCEL * -self.joystick.get_axis(1)
+                if event.axis == 2:  # Right stick horizontal axis = steering 
+                    self.control[1] = self.JOY_MAX_ROT_ACCEL * -self.joystick.get_axis(2)
+                
+        # if not self.Pause:
+            # obs, r, done, trun, state = self.step(self.control)
 
-            self.redraw(background)
+        self.redraw(self.background, self.boat_img, self.trailer_img)
          
-        pygame.quit()
+        # pygame.quit()
 
     def minangle(theta):
         while theta > np.pi:
@@ -294,20 +365,39 @@ class BlueBoat(gym.Env):
     # that is more accurate than dt * accel, rather it evaluates the dynamics
     # at several points and correctly integrates over time.
     def step(self,u,dt=None):
+        # return a 4-tuple (obs, reward, done, info)
 
         self.u = u
-
         if dt is None:
             dt = 0.005
         t1 = self.solver.t + dt
+        upper_t = 10.0
         while self.solver.successful and self.solver.t < t1:
+        # while self.solver.successful and self.solver.t < t1 and self.solver.t < upper_t:
             self.solver.integrate(self.solver.t+ dt)
-        self.x = np.array(self.solver.y)
+            
+            # print("self.solver.t: ", self.solver.t)
+            # print("t1: ", t1)
+            # print("\n")
+            
+        self.x = np.array(self.solver.y , dtype=np.float32)
         self.t = self.solver.t
-        return self.x
+        
+        observation = self.get_obs()
+        reward = self.get_reward()
+        reward = float(reward)
+        # print("reward: ", reward)
+        # print("action: ", self.u)
+        done = False
+        # if reward >= 1.0:
+        if self.is_in_trailer(self.x[0], self.x[1]):
+            done = True
+        truncated = False
+        info = {"t": self.t, "action": self.u}
+        
+        # return ({"state": self.x}, reward, done, truncated, {"action": self.u})
+        return observation, reward, done, truncated, info
 
-    def get_state(self):
-        return self.x
 
 # =============================================================================
 # # The next two are just helper functions for the display.
@@ -334,10 +424,10 @@ class BlueBoat(gym.Env):
 # Starting here is effectively the main function.
 # It's a simple GUI drawing loop that calls to your code to compute the control, sets it to the 
 # BlueBoat class and loops the GUI to show what happened.
-boat = BlueBoat(x0) 
-print(boat)
-state = boat.get_state()
-print(state)
+# boat = BlueBoat(x0) 
+# print(boat)
+# state = boat.get_state()
+# print(state)
 
 # =============================================================================
 # while not Done:
