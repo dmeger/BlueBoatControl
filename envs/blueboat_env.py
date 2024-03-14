@@ -310,7 +310,7 @@ class BlueBoat(gym.Env):
             bg.blit(throttle_label, (self.throttle_bar_position[0] - 100, self.throttle_bar_position[1]))
         else:
             throttle_bar_color = self.light_red # red for reverse
-            pygame.draw.rect(bg, throttle_bar_color, (self.throttle_bar_position[0] + self.throttle_bar_width * throttle_percentage / 100, self.throttle_bar_position[1], self.throttle_bar_width * throttle_percentage / 100, self.throttle_bar_height))
+            pygame.draw.rect(bg, throttle_bar_color, (self.throttle_bar_position[0] +  self.throttle_bar_width * throttle_percentage / 100, self.throttle_bar_position[1], - self.throttle_bar_width * throttle_percentage / 100, self.throttle_bar_height))
             bg.blit(throttle_label, (self.throttle_bar_position[0] + 10, self.throttle_bar_position[1]))
         # Draw the tick as a vertical line
         pygame.draw.lines(bg, tick_color, False, [(self.throttle_bar_position[0] + self.throttle_bar_width * clamped_throttle_percentage / 100, self.throttle_bar_position[1]), (self.throttle_bar_position[0] + self.throttle_bar_width * clamped_throttle_percentage / 100, self.throttle_bar_position[1] + self.throttle_bar_height)], 2)
