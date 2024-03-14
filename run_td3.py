@@ -21,7 +21,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
     eval_env = gym.make(env_name, X0=x0)
     # eval_env.seed(seed + 100)
 
-    max_timesteps = 50000
+    max_timesteps = 10000
     avg_reward = 0.
     for i in range(eval_episodes):
         # state, done = eval_env.reset(), False

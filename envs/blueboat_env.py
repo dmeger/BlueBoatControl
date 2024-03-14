@@ -386,6 +386,8 @@ class BlueBoat(gym.Env):
         observation = self.get_obs()
         reward = self.get_reward()
         reward = float(reward)
+        # print("reward: ", reward)
+        # print("action: ", self.u)
         done = False
         # if reward >= 1.0:
         if self.is_in_trailer(self.x[0], self.x[1]):
