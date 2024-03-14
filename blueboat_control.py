@@ -796,7 +796,7 @@ while not Done:
                 in_trailer = False
             if event.key == pygame.K_v:         # "v" key toggles velocity profiles
                 Hide_Vel_Prof = not Hide_Vel_Prof
-            if event.key == pygame.K_c:         # holding "c" key toggles continuous control
+            if event.key == pygame.K_c:         # "c" key toggles continuous control
                 Continuous_Control = not Continuous_Control
             # set the auto path mode with numbers
             if event.key == pygame.K_1 or event.key == pygame.K_2 or event.key == pygame.K_3 or event.key == pygame.K_4 or event.key == pygame.K_5:
