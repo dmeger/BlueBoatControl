@@ -44,8 +44,8 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
             avg_reward += reward
             count += 1
             is_inside = eval_env.is_inside_map(boat_pos[0], boat_pos[1])
-            # if count >= max_timesteps or (not is_inside):
-            if count >= max_timesteps:
+            if count >= max_timesteps or (not is_inside):
+            # if count >= max_timesteps:
                 done = True
 
     avg_reward /= eval_episodes

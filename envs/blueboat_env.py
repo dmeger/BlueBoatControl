@@ -109,7 +109,7 @@ class BlueBoat(gym.Env):
         self.trailer_img_size = (300*1.15,125*1.15)
         self.trailer_approach_dist = self.trailer_img_size[0] * 0.2
         self.trailer_threshold = (self.trailer_img_size[0] * 0.06, self.trailer_img_size[1] * 0.08)
-        self.trailer_pos = (400,100) # It's in pixels!
+        self.trailer_pos = (400,200) # It's in pixels!
         self.trailer_yaw = np.pi / 4
         self.trailer_inside_prop = (0.30, 0.525)
         self.trailer_centre = (self.trailer_pos[0] + self.trailer_img_size[0] * self.trailer_inside_prop[0], 
@@ -202,15 +202,16 @@ class BlueBoat(gym.Env):
         
         # print(self.initial_dist)
         # print(curr_dist)
-        
-        if self.is_in_trailer(self.bpos[0], self.bpos[1]):
+        if self.is_in_trailer_with_yaw(self.bpos[0], self.bpos[1], self.x[2]):
+            reward = 10.0
+        elif self.is_in_trailer(self.bpos[0], self.bpos[1]):
             reward = 1.0
-        elif abs(curr_dist) >= boundary:
-            reward = -10.0
+        # elif abs(curr_dist) >= boundary:
+        #     reward = -10.0
         else:
-            if self.initial_dist <= curr_dist:
-                reward = -0.01
-            else:
+            # if self.initial_dist <= curr_dist:
+            #     reward = -0.01
+            # else:
                 # prevent reward from zero division
                 reward = 1.0 / (curr_dist + 1.0)
                 # reward = 0.01
@@ -532,8 +533,8 @@ class BlueBoat(gym.Env):
         # print("action: ", self.u)
         done = False
         # if reward >= 1.0:
-        if self.is_in_trailer(self.x[0], self.x[1]):
-            done = True
+        # if not self.is_inside_map(self.x[0], self.x[1]):
+        #     done = True
         truncated = False
         info = {"t": self.t, "action": self.u}
         
