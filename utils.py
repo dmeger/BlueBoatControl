@@ -1,6 +1,12 @@
 import numpy as np
 import torch
 
+def minangle(theta):
+	while theta > np.pi:
+		theta = theta - 2*np.pi
+	while theta < -np.pi:
+		theta = theta + 2*np.pi
+	return theta
 
 class ReplayBuffer(object):
 	def __init__(self, state_dim, action_dim, max_size=int(1e6)):

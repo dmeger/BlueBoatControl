@@ -4,8 +4,6 @@ import pygame
 import math
 import numpy as np
 import envs
-# from envs.blueboat_env import BlueBoat
-# from envs.blueboat_sbenv import SBBlueBoat
 import torch
 import argparse
 import os
@@ -21,7 +19,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
     eval_env = gym.make(env_name, X0=x0)
     # eval_env.seed(seed + 100)
 
-    max_timesteps = 10000
+    max_timesteps = 600
     avg_reward = 0.
     for i in range(eval_episodes):
         # state, done = eval_env.reset(), False
