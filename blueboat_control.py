@@ -244,7 +244,8 @@ pygame.init()
 pygame.display.set_caption("BlueBoat Control") # set the title of the window
 background = pygame.display.set_mode((screen_width, screen_height))
 #clock = pygame.time.Clock()
-boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
+# boat_img = pygame.transform.smoothscale( pygame.image.load("img/bb.png").convert_alpha(), boat_img_size)
+boat_img = pygame.transform.smoothscale( pygame.image.load("img/boat.png").convert_alpha(), boat_img_size)
 trailer_img = pygame.transform.smoothscale( pygame.image.load("img/trailer.png").convert_alpha(), trailer_img_size)
 
 class PathDrawer:
