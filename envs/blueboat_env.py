@@ -193,7 +193,7 @@ class BlueBoat(gym.Env):
             self.x = np.array(x,dtype=np.float32).flatten()
         self.solver = self.solver.set_initial_value(self.x)
         self.t = self.solver.t
-        
+    
     def get_state(self):
         return self.x
     
@@ -266,7 +266,7 @@ class BlueBoat(gym.Env):
         rotated_x = (boat_centre[0] - self.trailer_centre[0]) * np.cos(-self.trailer_yaw) - (boat_centre[1] - self.trailer_centre[1]) * np.sin(-self.trailer_yaw)
         rotated_y = (boat_centre[0] - self.trailer_centre[0]) * np.sin(-self.trailer_yaw) + (boat_centre[1] - self.trailer_centre[1]) * np.cos(-self.trailer_yaw)
         # Check if the rotated boat coordinates are within the specified threshold around the trailer
-        return rotated_x > -self.trailer_threshold[0] and rotated_x < self.trailer_threshold[0] and rotated_y > -self.trailer_threshold[1] and rotated_y < self.trailer_threshold[1]
+        return rotated_x > -self.trailer_threshold[1] and rotated_x < self.trailer_threshold[1] and rotated_y > -self.trailer_threshold[0] and rotated_y < self.trailer_threshold[0]
 
     def is_in_trailer_with_yaw(self,x,y,theta):
         theta_threshold = np.pi / 18 # 10 degrees
@@ -436,6 +436,7 @@ class BlueBoat(gym.Env):
     def redraw(self, background, boat_img, trailer_img): 
         background.fill(self.white)
         self.grid(background, boat_img, trailer_img) # draw the grid
+        self.display_path_history(background) # display the path history
         self.display_inside_trailer_info(background) # display if the boat is inside the trailer or not
         # TODO: add if in auto TF mode: self.display_approach_points(background, 3) # display the approach points
         # display reference path here if needed
@@ -443,7 +444,6 @@ class BlueBoat(gym.Env):
         self.draw_throttle_bar(background, self.u[0], self.u[0]) # display throttle bar
         self.draw_steering_bar(background, self.u[1], self.u[1]) # display steering bar
         # TODO display driving mode
-        self.display_path_history(background) # display the path history
         self.display_inside_map_info(background) # display if the boat is inside the map or not
         self.display_reward(background) # display reward
         # TODO display velocity profiles if needed
@@ -546,24 +546,21 @@ class BlueBoat(gym.Env):
     # evaluating the dynamics. The solver does this in an "intelligent" way
     # that is more accurate than dt * accel, rather it evaluates the dynamics
     # at several points and correctly integrates over time.
-    def step(self,u,dt=None):
+    def step(self,u,dt=None,rl=True):
         # return a 4-tuple (obs, reward, done, info)
 
         self.u = u
+
         if dt is None:
             dt = 0.005
         t1 = self.solver.t + dt
-        upper_t = 10.0
         while self.solver.successful and self.solver.t < t1:
-        # while self.solver.successful and self.solver.t < t1 and self.solver.t < upper_t:
             self.solver.integrate(self.solver.t+ dt)
-            
-            # print("self.solver.t: ", self.solver.t)
-            # print("t1: ", t1)
-            # print("\n")
-            
-        self.x = np.array(self.solver.y , dtype=np.float32)
+        self.x = np.array(self.solver.y)
         self.t = self.solver.t
+
+        if not rl:
+            return self.x
         
         observation = self.get_obs()
         reward = self.get_reward()

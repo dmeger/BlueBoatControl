@@ -395,8 +395,8 @@ class BlueBoat(object):
 
         # Check if the rotated boat coordinates are within the specified threshold around the trailer
         return (
-            rotated_x > -trailer_threshold[0] and rotated_x < trailer_threshold[0] and
-            rotated_y > -trailer_threshold[1] and rotated_y < trailer_threshold[1]
+            rotated_x > -trailer_threshold[1] and rotated_x < trailer_threshold[1] and
+            rotated_y > -trailer_threshold[0] and rotated_y < trailer_threshold[0]
         )
     
     def is_in_trailer_with_yaw(self,x,y,yaw):
@@ -747,10 +747,10 @@ path_drawer = PathDrawer(screen_center, screen_width, screen_height)
 path_waypoints = path_drawer.draw_path(auto_path_mode)
 
 FORWARD_MIN_LIN_ACCEL = 6.0
-FORWARD_MAX_LIN_ACCEL = 16.0
-REVERSE_MIN_LIN_ACCEL = 2.0
-REVERSE_MAX_LIN_ACCEL = 8.0
-MAX_ROT_ACCEL = 4.0
+FORWARD_MAX_LIN_ACCEL = 10.0
+REVERSE_MIN_LIN_ACCEL = 6.0
+REVERSE_MAX_LIN_ACCEL = 10.0
+MAX_ROT_ACCEL = 5.0
 THROTTLE_THRESHOLD = 2.0
 
 LINACCEL_INCR = 4.0

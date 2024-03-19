@@ -2,8 +2,6 @@ import pygame
 import numpy as np
 import math
 import sys
-from utils import minangle
-# import BlueBoat from envs
 from envs import BlueBoat
 
 class Controller:
@@ -34,17 +32,11 @@ class Controller:
             sys.exit()
 
     def get_controller_throttle(self):
-        if self.controller_type == "xbox" or self.controller_type == "ps4":
-            throttle = self.joystick.get_axis(self.THROTTLE_AXIS) * self.THROTTLE_MULTIPLIER
-        elif self.controller_type == "keyboard":
-            throttle = 0
+        throttle = self.joystick.get_axis(self.THROTTLE_AXIS) * self.THROTTLE_MULTIPLIER
         return throttle
     
     def get_controller_steering(self):
-        if self.controller_type == "xbox" or self.controller_type == "ps4":
-            steering = self.joystick.get_axis(self.STEERING_AXIS) * self.STEERING_MULTIPLIER
-        elif self.controller_type == "keyboard":
-            steering = 0
+        steering = self.joystick.get_axis(self.STEERING_AXIS) * self.STEERING_MULTIPLIER
         return steering
 
 # CONTROLLER
@@ -60,46 +52,58 @@ controller = Controller(controller_type)
 Done = False                # if True,out of while loop, and close pygame
 Pause = False               # when True, freeze the boat. This is 
                             # for debugging purposes
+
 # Initialize the environment
 x0 = [0,0,0,0,0,0]
 env = BlueBoat(X0=x0)
 env.reset()
 env.render()
+
+throttle = 0
+steering = 0
+
 # Main loop
 while not Done:
-    # Get controller input
-    throttle = 0
-    steering = 0
-
     # Check for events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             Done = True
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
+            if event.key == pygame.K_r:         # "r" key resets the simulator
+                env.reset()
+            if event.key == pygame.K_ESCAPE:    # "esc" key closes the simulator
                 Done = True
-            if event.key == pygame.K_p:
-                Pause = not Pause
+            if event.key == pygame.K_UP:
+                throttle = env.FORWARD_MAX_LIN_ACCEL
+            if event.key == pygame.K_DOWN:
+                throttle = -env.REVERSE_MAX_LIN_ACCEL
+            if event.key == pygame.K_LEFT:
+                steering = env.MAX_ROT_ACCEL
+            if event.key == pygame.K_RIGHT:
+                steering = -env.MAX_ROT_ACCEL
+            if event.key == pygame.K_p:         # "p" key pauses the simulator
+                Pause = True
         if event.type == pygame.KEYUP:
-            if event.key == pygame.K_p:
-                Pause = not Pause
+            if event.key == pygame.K_p:         # releasing "p" key unpauses the simulator
+                Pause = False
+            if event.key == pygame.K_UP:
+                throttle = 0
+            if event.key == pygame.K_DOWN:
+                throttle = 0
+            if event.key == pygame.K_LEFT:
+                steering = 0
+            if event.key == pygame.K_RIGHT:
+                steering = 0
         if event.type == pygame.JOYAXISMOTION:
-            if event.axis == 1:  # Left stick vertical axis = throttle
-                throttle = controller.get_controller_throttle()
-            if event.axis == 2:
-                steering = controller.get_controller_steering()
+            if event.axis == controller.THROTTLE_AXIS:  # Left stick vertical axis = throttle
+                throttle = controller.get_controller_throttle() * env.FORWARD_MAX_LIN_ACCEL
+            if event.axis == controller.STEERING_AXIS: # Right stick horizontal axis = steering
+                steering = controller.get_controller_steering() * env.MAX_ROT_ACCEL
     # If the environment is not paused, take action
     if not Pause:
         # Take action in the environment
-        action = np.array([throttle, steering])
-        env.step(action)
+        env.step([throttle, steering], None, False)
         # Render the environment
         env.render()
 
-    # If the environment is paused, wait for the user to unpause
-    while Pause:
-        for event in pygame.event.get():
-            if event.type == pygame.KEYUP:
-                if event.key == pygame.K_p:
-                    Pause = not Pause
 pygame.quit()
