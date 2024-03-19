@@ -52,6 +52,9 @@ class BlueBoatReward(object):
         reward = np.exp(-x)
         return reward
 
+
+# TODO: Have blueboat_control2.py use the BlueBoat class
+
 # A simple class to simulate BlueBoat physics using an ODE solver
 class BlueBoat(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 40}
@@ -83,7 +86,6 @@ class BlueBoat(gym.Env):
         self.Done = False                # if True,out of while loop, and close pygame
         self.Pause = False               # when True, freeze the boat. This is for debugging
         
-
         # COLORS
         self.white = (255,255,255)
         self.black = (0,0,0)
@@ -105,6 +107,9 @@ class BlueBoat(gym.Env):
         self.coord_to_screen_scaling = 100.0
         self.boat_img_size = (100,49)
 
+        # OUTPUT DISPLAY
+        self.traj_image_count = 0
+
         # TRAILER DISPLAY AND GEOMETRY
         self.trailer_img_size = (300*1.15,125*1.15)
         self.trailer_approach_dist = self.trailer_img_size[0] * 0.2
@@ -125,6 +130,9 @@ class BlueBoat(gym.Env):
         self.steering_bar_height = 20
         self.steering_bar_position = (self.screen_width // 2 - self.steering_bar_width // 2, 750)
         self.driving_mode_position = (self.screen_width // 2 - self.steering_bar_width // 2, 650)
+
+        # DISPLAY VARIABLES
+        self.path_history = []
 
         # VELOCITY PROFILES DISPLAY
         self.vel_prof_height = 150
@@ -148,7 +156,8 @@ class BlueBoat(gym.Env):
         self.MAX_ROT_ACCEL = 4.0
         self.THROTTLE_THRESHOLD = 2.0
         self.control = np.array([0.0,0.0], dtype=np.float32)
-
+        self.throttle = 0.0
+        self.steering = 0.0
 
         pygame.init()
         pygame.display.set_caption("BlueBoat Control 2") # set the title of the window  
@@ -220,6 +229,7 @@ class BlueBoat(gym.Env):
     # Convenience function. Allows for quickly resetting back to the initial state to
     # get a clearer view of how the control works.
     def reset(self, seed=None, options=None):
+        self.output_traj_image(self.background, self.boat_img, self.trailer_img)
         super().reset(seed=seed)
         
         self.x = self.X0
@@ -234,6 +244,7 @@ class BlueBoat(gym.Env):
         
         # print(obs)
         # print(info)
+        self.reset_path_history()
         
         return obs, info
 
@@ -337,9 +348,25 @@ class BlueBoat(gym.Env):
 
     # display_driving_mode TODO
         
-    # display_path_history TODO
-        
-    # add_to_path_history TODO
+    def add_to_path_history(self):
+        self.path_history.append((self.x))
+
+    def reset_path_history(self):
+        self.path_history = []
+
+    def display_path_history(self, bg, full_display = False):
+        if full_display:
+            img_gap = 40
+            for i in range(len(self.path_history) - 1):
+                if i % img_gap == 0:
+                    p1 = self.to_screen(self.path_history[i][0], self.path_history[i][1])
+                    yaw = self.path_history[i][2]
+                    self.blitRotate(bg, self.boat_img, p1, (int(self.boat_img_size[0]/2), int(self.boat_img_size[1]/2)), yaw*180.0/np.pi)
+        else:
+            for i in range(len(self.path_history) - 1):
+                p1 = self.to_screen(self.path_history[i][0], self.path_history[i][1])
+                p2 = self.to_screen(self.path_history[i+1][0], self.path_history[i+1][1])
+                pygame.draw.lines(bg, self.black, False, [p1, p2], 2)
 
     def display_inside_map_info(self, bg):
         # display if the boat is inside the map or not
@@ -416,12 +443,24 @@ class BlueBoat(gym.Env):
         self.draw_throttle_bar(background, self.u[0], self.u[0]) # display throttle bar
         self.draw_steering_bar(background, self.u[1], self.u[1]) # display steering bar
         # TODO display driving mode
+        self.display_path_history(background) # display the path history
         self.display_inside_map_info(background) # display if the boat is inside the map or not
         self.display_reward(background) # display reward
         # TODO display velocity profiles if needed
         # TODO display time
         pygame.display.update()
         pygame.display.flip()
+
+    def output_traj_image(self, bg, boat_img, trailer_img):
+        bg.fill(self.white)
+        self.grid(bg, boat_img, trailer_img) # draw the grid
+        self.display_inside_trailer_info(bg) # display if the boat is inside the trailer or not
+        self.display_path_history(bg, True) # display the path history
+        self.draw(bg, boat_img, trailer_img) # draw the boat
+        self.display_inside_map_info(bg) # display if the boat is inside the map or not
+        self.display_reward(bg) # display reward
+        pygame.image.save(bg, "results/traj_images/traj_image_" + str(self.traj_image_count) + ".png")
+        self.traj_image_count += 1
 
     def display_reward(self, bg):
         reward = self.get_reward()
@@ -441,39 +480,39 @@ class BlueBoat(gym.Env):
         # while not self.Done:
             #clock.tick(30)             # GUI refresh rate
                              
-        for event in pygame.event.get():
-        #if False:
-            if event.type == pygame.QUIT:                    
-                self.Done = True                                   
-            if event.type == pygame.KEYDOWN:    # keyboard control
-                if event.key == pygame.K_r:     # "r" key resets the simulator
-                    self.control = [0,0]
-                    # boat.reset()
-                    self.reset()
-                if event.key == pygame.K_p:     # holding "p" key freezes time
-                    self.Pause = True
-                if event.key == pygame.K_UP:
-                    self.control[0] = self.control[0]+self.LINACCEL_INCR
-                if event.key == pygame.K_DOWN:
-                    self.control[0] = self.control[0]-self.LINACCEL_INCR
-                if event.key == pygame.K_RIGHT:
-                    self.control[1] = self.control[1]-self.ROTACCEL_INCR
-                if event.key == pygame.K_LEFT:
-                    self.control[1] = self.control[1]+self.ROTACCEL_INCR 
-                if event.key == pygame.K_q:
-                    self.Done = True
-            if event.type == pygame.KEYUP:      # releasing "p" makes us live again
-                if event.key == pygame.K_p:
-                    self.Pause = False
-            if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
-                if event.axis == 1:  # Left stick vertical axis = throttle
-                    self.control[0] = self.JOY_MAX_LIN_ACCEL * -self.joystick.get_axis(1)
-                if event.axis == 2:  # Right stick horizontal axis = steering 
-                    self.control[1] = self.JOY_MAX_ROT_ACCEL * -self.joystick.get_axis(2)
+        # for event in pygame.event.get():
+        # #if False:
+        #     if event.type == pygame.QUIT:                    
+        #         self.Done = True                                   
+        #     if event.type == pygame.KEYDOWN:    # keyboard control
+        #         if event.key == pygame.K_r:     # "r" key resets the simulator
+        #             self.control = [0,0]
+        #             # boat.reset()
+        #             self.reset()
+        #         if event.key == pygame.K_p:     # holding "p" key freezes time
+        #             self.Pause = True
+        #         if event.key == pygame.K_UP:
+        #             self.control[0] = self.control[0]+self.LINACCEL_INCR
+        #         if event.key == pygame.K_DOWN:
+        #             self.control[0] = self.control[0]-self.LINACCEL_INCR
+        #         if event.key == pygame.K_RIGHT:
+        #             self.control[1] = self.control[1]-self.ROTACCEL_INCR
+        #         if event.key == pygame.K_LEFT:
+        #             self.control[1] = self.control[1]+self.ROTACCEL_INCR 
+        #         if event.key == pygame.K_q:
+        #             self.Done = True
+        #     if event.type == pygame.KEYUP:      # releasing "p" makes us live again
+        #         if event.key == pygame.K_p:
+        #             self.Pause = False
+        #     if event.type == pygame.JOYAXISMOTION:      # xbox joystick controller control
+        #         if event.axis == 1:  # Left stick vertical axis = throttle
+        #             self.control[0] = self.throttle
+        #         if event.axis == 2:  # Right stick horizontal axis = steering 
+        #             self.control[1] = self.steering
                 
         # if not self.Pause:
             # obs, r, done, trun, state = self.step(self.control)
-
+        self.add_to_path_history()
         self.redraw(self.background, self.boat_img, self.trailer_img)
          
         # pygame.quit()

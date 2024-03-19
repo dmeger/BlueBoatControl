@@ -19,7 +19,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
     eval_env = gym.make(env_name, X0=x0)
     # eval_env.seed(seed + 100)
 
-    max_timesteps = 600
+    max_timesteps = 300
     avg_reward = 0.
     for i in range(eval_episodes):
         # state, done = eval_env.reset(), False
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--start_timesteps", default=25e3, type=int)# Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=5e3, type=int)       # How often (time steps) we evaluate
-    parser.add_argument("--max_timesteps", default=1e6, type=int)   # Max time steps to run environment
+    parser.add_argument("--max_timesteps", default=1e3, type=int)   # Max time steps to run environment
     parser.add_argument("--expl_noise", default=0.1, type=float)    # Std of Gaussian exploration noise
     parser.add_argument("--batch_size", default=256, type=int)      # Batch size for both actor and critic
     parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
@@ -83,6 +83,12 @@ if __name__ == "__main__":
 
     if not os.path.exists("./results"):
         os.makedirs("./results")
+
+    if not os.path.exists("./results/traj_images"):
+        os.makedirs("./results/traj_images")
+
+    for file in os.listdir("./results/traj_images"):
+        os.remove(os.path.join("./results/traj_images", file))
 
     if args.save_model and not os.path.exists("./models"):
         os.makedirs("./models")

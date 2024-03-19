@@ -3,3 +3,4 @@ envs/__pycache__/*
 __pycache__/*
 envs/.DS_Store
 results/*
+img/.DS_Store
