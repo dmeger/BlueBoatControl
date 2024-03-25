@@ -13,13 +13,18 @@ import TD3
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=10):
+def eval_policy(policy, env_name, seed, eval_episodes=10., traj_image_count = 0):
     x0 = [0,0,0,0,0,0] 
     # env = gym.make('BlueBoat-v0', X0=x0)
     eval_env = gym.make(env_name, X0=x0)
     # eval_env.seed(seed + 100)
+    eval_env.set_img_name("eval", traj_image_count)
 
-    max_timesteps = 300
+    max_action = float(eval_env.action_space.high[0]) # [float(env.action_space.high[i]) for i in range(action_dim)]
+    max_action_full = eval_env.action_space.high
+    action_scaling_factor = max_action_full / max_action
+
+    max_timesteps = 600
     avg_reward = 0.
     for i in range(eval_episodes):
         # state, done = eval_env.reset(), False
@@ -32,6 +37,8 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
         
         while not done:
             action = policy.select_action(np.array(state))
+            # action = action * action_scaling_factor # TODO check if necessary? just clip?
+            action = action.clip(-max_action_full, max_action_full)
             # state, reward, done, _ = eval_env.step(action)
             # print(action)
             observation, reward, done, truncated, info = eval_env.step(action)
@@ -53,7 +60,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
     print("---------------------------------------")
     print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f}")
     print("---------------------------------------")
-    return avg_reward
+    return avg_reward, eval_env.get_img_count()
 
 
 if __name__ == "__main__":
@@ -62,10 +69,10 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="TD3")                  # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--env", default="BlueBoat-v0")          # OpenAI gym environment name
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--start_timesteps", default=25e3, type=int)# Time steps initial random policy is used
-    parser.add_argument("--eval_freq", default=5e3, type=int)       # How often (time steps) we evaluate
-    parser.add_argument("--max_timesteps", default=1e3, type=int)   # Max time steps to run environment
-    parser.add_argument("--expl_noise", default=0.1, type=float)    # Std of Gaussian exploration noise
+    parser.add_argument("--start_timesteps", default=5e3, type=int)# Time steps initial random policy is used
+    parser.add_argument("--eval_freq", default=1e4, type=int)       # How often (time steps) we evaluate
+    parser.add_argument("--max_timesteps", default=1e8, type=int)   # Max time steps to run environment
+    parser.add_argument("--expl_noise", default=0.9, type=float)    # Std of Gaussian exploration noise
     parser.add_argument("--batch_size", default=256, type=int)      # Batch size for both actor and critic
     parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)         # Target network update rate
@@ -105,8 +112,15 @@ if __name__ == "__main__":
     
     state_dim = env.observation_space["state"].shape[0]
     action_dim = env.action_space.shape[0] 
-    max_action = float(env.action_space.high[0])
-    # print(max_action)
+    max_action = float(env.action_space.high[0]) # [float(env.action_space.high[i]) for i in range(action_dim)]
+    max_action_full = env.action_space.high
+    action_scaling_factor = max_action_full / max_action
+    # print("Max action: ", max_action)
+    # print("State dim: ", state_dim)
+    # print("Action dim: ", action_dim)
+    # print("Max action full: ", max_action_full)
+
+    eval_episodes = 10
 
     kwargs = {
         "state_dim": state_dim,
@@ -119,8 +133,8 @@ if __name__ == "__main__":
     # Initialize policy
     if args.policy == "TD3":
         # Target policy smoothing is scaled wrt the action scale
-        kwargs["policy_noise"] = args.policy_noise * max_action
-        kwargs["noise_clip"] = args.noise_clip * max_action
+        kwargs["policy_noise"] = args.policy_noise * max_action # [args.policy_noise * max_action[i] for i in range(action_dim)]
+        kwargs["noise_clip"] = args.noise_clip * max_action # [args.noise_clip * max_action[i] for i in range(action_dim)]
         kwargs["policy_freq"] = args.policy_freq
         policy = TD3.TD3(**kwargs)
 # =============================================================================
@@ -135,9 +149,15 @@ if __name__ == "__main__":
         policy.load(f"./models/{policy_file}")
 
     replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
-    
+
+    saved_traj_image_count = 0
+
     # Evaluate untrained policy
-    evaluations = [eval_policy(policy, args.env, args.seed)]
+    new_eval, saved_traj_image_count = eval_policy(policy, args.env, args.seed, eval_episodes, saved_traj_image_count)
+
+    evaluations = [new_eval]
+
+    env.set_img_name("train", saved_traj_image_count)
 
     # state, done = env.reset(), False
     done = False
@@ -148,6 +168,12 @@ if __name__ == "__main__":
     episode_reward = 0
     episode_timesteps = 0
     episode_num = 0
+    episode_max_timesteps = 700
+
+    # print("Max action: ", max_action)
+    # print("State dim: ", state_dim)
+    # print("Action dim: ", action_dim)
+    # print("Max action full: ", max_action_full)
 
     for t in range(int(args.max_timesteps)):
         
@@ -159,17 +185,27 @@ if __name__ == "__main__":
         else:
             action = (
                 policy.select_action(np.array(state))
-                + np.random.normal(0, max_action * args.expl_noise, size=action_dim)
-            ).clip(-max_action, max_action)
+            )
+
+            # print("Policy raw action: ", action)
+
+            action+= np.random.normal(0, max_action * args.expl_noise, size=action_dim)
+            
+            action = action * action_scaling_factor
+            
+            action = action.clip(-max_action_full, max_action_full)
+            # action = action.clip(-max_action, max_action)
+
+            # print("Action: ", action)
 
         # Perform action
-        # next_state, reward, done, _ = env.step(action) 
-        # print(action)
         observation, reward, done, truncated, info = env.step(action)
         next_state = observation["state"]
         env.render()
+
+        done = done or episode_timesteps >= episode_max_timesteps
         
-        done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+        done_bool = float(done) # if episode_timesteps < env._max_episode_steps else 0
 
         # Store data in replay buffer
         replay_buffer.add(state, action, next_state, reward, done_bool)
@@ -196,6 +232,12 @@ if __name__ == "__main__":
 
         # Evaluate episode
         if (t + 1) % args.eval_freq == 0:
-            evaluations.append(eval_policy(policy, args.env, args.seed))
+            saved_traj_image_count = env.get_img_count() 
+
+            new_eval, saved_traj_image_count = eval_policy(policy, args.env, args.seed, eval_episodes, saved_traj_image_count)
+
+            env.set_img_name("train", saved_traj_image_count)
+
+            evaluations.append(new_eval)
             np.save(f"./results/{file_name}", evaluations)
             if args.save_model: policy.save(f"./models/{file_name}")

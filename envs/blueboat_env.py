@@ -109,12 +109,13 @@ class BlueBoat(gym.Env):
 
         # OUTPUT DISPLAY
         self.traj_image_count = 0
+        self.traj_image_text = "default"
 
         # TRAILER DISPLAY AND GEOMETRY
         self.trailer_img_size = (300*1.15,125*1.15)
         self.trailer_approach_dist = self.trailer_img_size[0] * 0.2
         self.trailer_threshold = (self.trailer_img_size[0] * 0.06, self.trailer_img_size[1] * 0.08)
-        self.trailer_pos = (400,200) # It's in pixels!
+        self.trailer_pos = (450,100) # It's in pixels!
         self.trailer_yaw = np.pi / 4
         self.trailer_inside_prop = (0.30, 0.525)
         self.trailer_centre = (self.trailer_pos[0] + self.trailer_img_size[0] * self.trailer_inside_prop[0], 
@@ -150,7 +151,7 @@ class BlueBoat(gym.Env):
 
         # CONTROL
         self.FORWARD_MIN_LIN_ACCEL = 10.0
-        self.FORWARD_MAX_LIN_ACCEL = 30.0
+        self.FORWARD_MAX_LIN_ACCEL = 20.0
         self.REVERSE_MIN_LIN_ACCEL = 2.0
         self.REVERSE_MAX_LIN_ACCEL = 8.0
         self.MAX_ROT_ACCEL = 4.0
@@ -171,10 +172,11 @@ class BlueBoat(gym.Env):
 
         from_trailer_pos = self.from_screen(self.trailer_centre[0], self.trailer_centre[1])
         self.tpos = np.asarray(from_trailer_pos, dtype=np.float32)
+        self.fulltpos = np.asarray([from_trailer_pos[0], from_trailer_pos[1], self.trailer_yaw], dtype=np.float32)
         self.initial_dist = np.linalg.norm((self.bpos-self.tpos), ord=2)
         
         high = np.array([self.FORWARD_MAX_LIN_ACCEL, self.MAX_ROT_ACCEL], dtype=np.float32)
-        self.action_space = spaces.Box(-high, high, dtype=np.float32)     
+        self.action_space = spaces.Box(-high, high, dtype=np.float32)
 
         # observation space is the combination of state, action, and trailer position 
         size_meters = self.from_screen(self.screen_width, self.screen_height)
@@ -198,23 +200,27 @@ class BlueBoat(gym.Env):
         return self.x
     
     def get_obs(self):
-        return {"state": self.x, "action": self.u, "target": self.tpos}
+        return {"state": self.x, "action": self.u, "target": self.fulltpos}
     
     def get_reward(self):
         self.bpos = self.x[:2]
         self.bpos = np.asarray(self.bpos)
+        from_trailer_pos = self.from_screen(self.trailer_centre[0], self.trailer_centre[1])
+        self.tpos = np.asarray(from_trailer_pos, dtype=np.float32)
+        self.fulltpos = np.asarray([from_trailer_pos[0], from_trailer_pos[1], self.trailer_yaw], dtype=np.float32)
         reward = 0.0
         threshold = 0.1 * self.initial_dist
         boundary = 2.0 * self.initial_dist
         diff = self.bpos - self.tpos
         curr_dist = np.linalg.norm(diff, ord=2)
+        ang_dist = abs(minangle(self.x[2] - self.trailer_yaw))
         
         # print(self.initial_dist)
         # print(curr_dist)
         if self.is_in_trailer_with_yaw(self.bpos[0], self.bpos[1], self.x[2]):
             reward = 10.0
         elif self.is_in_trailer(self.bpos[0], self.bpos[1]):
-            reward = 1.0
+            reward = 1.0 / (ang_dist + 1.0)
         # elif abs(curr_dist) >= boundary:
         #     reward = -10.0
         else:
@@ -222,7 +228,7 @@ class BlueBoat(gym.Env):
             #     reward = -0.01
             # else:
                 # prevent reward from zero division
-                reward = 1.0 / (curr_dist + 1.0)
+                reward = 1.0 / (curr_dist + ang_dist + 1.0)
                 # reward = 0.01
         return reward
 
@@ -230,6 +236,7 @@ class BlueBoat(gym.Env):
     # get a clearer view of how the control works.
     def reset(self, seed=None, options=None):
         self.output_traj_image(self.background, self.boat_img, self.trailer_img)
+        self.update_trailer_position()
         super().reset(seed=seed)
         
         self.x = self.X0
@@ -459,13 +466,20 @@ class BlueBoat(gym.Env):
         self.draw(bg, boat_img, trailer_img) # draw the boat
         self.display_inside_map_info(bg) # display if the boat is inside the map or not
         self.display_reward(bg) # display reward
-        pygame.image.save(bg, "results/traj_images/traj_image_" + str(self.traj_image_count) + ".png")
+        pygame.image.save(bg, "results/traj_images/traj_image_" + str(self.traj_image_count) + "_" + self.traj_image_text + ".png")
         self.traj_image_count += 1
 
     def display_reward(self, bg):
         reward = self.get_reward()
         reward_text = self.font.render("Reward: " + str(reward), True, self.black)
         bg.blit(reward_text, (self.screen_width - 200, 0))
+
+    def set_img_name(self, text, count):
+        self.traj_image_text = text
+        self.traj_image_count = count
+
+    def get_img_count(self):
+        return self.traj_image_count
 
     def render(self):
         # pygame.init()
@@ -568,6 +582,8 @@ class BlueBoat(gym.Env):
         # print("reward: ", reward)
         # print("action: ", self.u)
         done = False
+        if not self.is_inside_map(self.x[0], self.x[1]):
+            done = True
         # if reward >= 1.0:
         # if not self.is_inside_map(self.x[0], self.x[1]):
         #     done = True
