@@ -101,7 +101,7 @@ class BlueBoat(gym.Env):
         self.light_grey = (150, 150, 150)
 
         # DISPLAY
-        self.screen_width = 800
+        self.screen_width = 1600
         self.screen_height = 800
         self.screen_center = (self.screen_width // 2, self.screen_height // 2)
         self.coord_to_screen_scaling = 100.0
@@ -140,6 +140,9 @@ class BlueBoat(gym.Env):
         self.vel_prof_width = 300
         self.lin_vel_prof_pos = (50, 0)
         self.ang_vel_prof_pos = (50, self.vel_prof_height)
+        self.surge_vel_pos = (50, 50)
+        self.sway_vel_pos = (50, 100)
+        self.ang_vel_pos = (50, 150)
 
         # FONT
         pygame.font.init()
@@ -151,10 +154,12 @@ class BlueBoat(gym.Env):
 
         # CONTROL
         self.FORWARD_MIN_LIN_ACCEL = 10.0
-        self.FORWARD_MAX_LIN_ACCEL = 20.0
+        self.FORWARD_MAX_LIN_ACCEL = 40.0
         self.REVERSE_MIN_LIN_ACCEL = 2.0
-        self.REVERSE_MAX_LIN_ACCEL = 8.0
-        self.MAX_ROT_ACCEL = 4.0
+        self.REVERSE_MAX_LIN_ACCEL = 10.0
+        self.MAX_ROT_ACCEL = 20.0
+        self.MAX_LINEAR_VELOCITY = 20.0
+        self.MAX_ANGULAR_VELOCITY = 20.0
         self.THROTTLE_THRESHOLD = 2.0
         self.control = np.array([0.0,0.0], dtype=np.float32)
         self.throttle = 0.0
@@ -439,6 +444,31 @@ class BlueBoat(gym.Env):
         self.trailer_approach_pt_0 = ((self.trailer_centre[0] - 2 * self.trailer_approach_dist * np.cos(self.trailer_yaw)), 
                                 (self.trailer_centre[1] + 2 * self.trailer_approach_dist * np.sin(self.trailer_yaw)))
         
+    def display_velocity(self, bg):
+        surge_vel = self.x[3] * np.cos(self.x[2]) - self.x[4] * np.sin(self.x[2])
+        sway_vel = self.x[3] * np.sin(self.x[2]) + self.x[4] * np.cos(self.x[2])
+        ang_vel = self.x[5]
+        surge_vel_text = self.font.render("Surge Vel.: {:.2f} m/s".format(surge_vel), True, self.black)
+        sway_vel_text = self.font.render("Sway Vel.: {:.2f} m/s".format(sway_vel), True, self.black)
+        ang_vel_text = self.font.render("Ang. Vel.: {:.2f} rad/s".format(ang_vel), True, self.black)
+        bg.blit(surge_vel_text, self.surge_vel_pos)
+        bg.blit(sway_vel_text, self.sway_vel_pos)
+        bg.blit(ang_vel_text, self.ang_vel_pos)
+
+    def relocate_robot(self):
+        # Relocate the robot to the opposite edge of the screen if it goes out of the screen
+        if self.x[0] > self.grid_shape[0]:
+            self.x[0] = -self.grid_shape[0]
+        elif self.x[0] < -self.grid_shape[0]:
+            self.x[0] = self.grid_shape[0]
+        if self.x[1] > self.grid_shape[1]:
+            self.x[1] = -self.grid_shape[1]
+        elif self.x[1] < -self.grid_shape[1]:
+            self.x[1] = self.grid_shape[1]
+        self.t = 0.0
+        self.set_state(self.x)
+        self.reset_path_history()
+        
     # Clean up the screen and draw a fresh grid and the BlueBoat with its latest state coordinates
     def redraw(self, background, boat_img, trailer_img): 
         background.fill(self.white)
@@ -454,7 +484,9 @@ class BlueBoat(gym.Env):
         self.display_inside_map_info(background) # display if the boat is inside the map or not
         self.display_reward(background) # display reward
         # TODO display velocity profiles if needed
+        self.display_velocity(background) # display velocity
         # TODO display time
+        self.draw_envelope(self.x) # draw the envelope
         pygame.display.update()
         pygame.display.flip()
 
@@ -471,7 +503,7 @@ class BlueBoat(gym.Env):
 
     def display_reward(self, bg):
         reward = self.get_reward()
-        reward_text = self.font.render("Reward: " + str(reward), True, self.black)
+        reward_text = self.font.render("Reward: {:.2f}".format(reward), True, self.black)
         bg.blit(reward_text, (self.screen_width - 200, 0))
 
     def set_img_name(self, text, count):
@@ -531,6 +563,80 @@ class BlueBoat(gym.Env):
          
         # pygame.quit()
 
+    # This function draws the envelope of possible future states that could be reached
+    # by applying different actions to the current state of the boat.
+    def draw_envelope(self, state):
+        envelope = self.dwa_envelope(state)
+        for time_env, color in envelope:
+            for i in range(len(time_env) - 1):
+                p1 = self.to_screen(time_env[i][0], time_env[i][1])
+                p2 = self.to_screen(time_env[i+1][0], time_env[i+1][1])
+                pygame.draw.lines(self.background, color, False, [p1, p2], 2)
+
+
+    # This function is used for the DWA (Dynamic Window Approach) control method.
+    # It takes as input the current state of the boat, and computes the envelope
+    # of possible future states that could be reached by applying different actions.
+    def dwa_envelope(self, state):
+        low_speed_color = self.dark_red
+        high_speed_color = self.dark_green
+        dt = 0.02
+        max_time = 0.3
+        lin_vel_num = 6
+        ang_vel_num = 5
+        min_lin_accel = -self.REVERSE_MAX_LIN_ACCEL
+        lin_vel_range = self.FORWARD_MAX_LIN_ACCEL - min_lin_accel
+        ang_vel_range = 2 * self.MAX_ROT_ACCEL
+        lin_vel_step = lin_vel_range / lin_vel_num
+        ang_vel_step = ang_vel_range / ang_vel_num
+        # Define the range of possible linear and angular accelerations
+        lin_accel_range = np.arange(min_lin_accel, self.FORWARD_MAX_LIN_ACCEL, lin_vel_step)
+        rot_accel_range = np.arange(-self.MAX_ROT_ACCEL, self.MAX_ROT_ACCEL, ang_vel_step)
+        # Define the range of possible linear and angular velocities
+        # lin_vel_range = np.arange(-self.MAX_LINEAR_VELOCITY, self.MAX_LINEAR_VELOCITY, 0.5)
+        # ang_vel_range = np.arange(-self.MAX_ANGULAR_VELOCITY, self.MAX_ANGULAR_VELOCITY, 0.5)
+        # TODO define braking distance constraints
+        # Define the range of possible times
+        time_range = np.arange(0, max_time, dt)
+        # Initialize the envelope
+        envelope = []
+        color = low_speed_color
+        color_step = tuple((np.array(high_speed_color) - np.array(low_speed_color)) / lin_vel_num)
+        # Loop over all possible linear and angular accelerations
+        for lin_accel in lin_accel_range:
+            for rot_accel in rot_accel_range:
+                # Loop over all possible times
+                time_env = []
+                timed_state = state
+                for time in time_range:
+                    # Compute the new state
+                    new_state = self.dwa_step(timed_state, [lin_accel, rot_accel], dt)
+                    # Add the new state to the envelope
+                    time_env.append(new_state)
+                    timed_state = new_state
+                envelope.append([time_env, color])
+            color = tuple(np.array(color) + np.array(color_step))
+        return envelope
+
+    # This function is used for the DWA (Dynamic Window Approach) control method.
+    # It takes as input the current state of the boat, an action, and a time step,
+    # and computes the new state that would be reached by applying the action for
+    # the given time step.
+    def dwa_step(self, state, action, time):
+        f = action
+        # Compute global linear force
+        fx = f[0] * np.cos(state[2])
+        fy = -f[0] * np.sin(state[2])
+        # Compute the new state
+        new_state = np.zeros((6,1))
+        new_state[3] = state[3] + fx * time - 3 * state[3] * time
+        new_state[4] = state[4] + fy * time - 3 * state[4] * time
+        new_state[5] = state[5] + f[1] * time - 3 * state[5] * time
+        new_state[0] = state[0] + new_state[3] * time
+        new_state[1] = state[1] + new_state[4] * time
+        new_state[2] = state[2] + new_state[5] * time
+        return new_state
+        
     # These equations are simply typed in from the dynamics 
     # on the assignment document. They have been derived 
     # for a boat with a motor and a rudder, and are a simplified

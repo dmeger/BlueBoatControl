@@ -105,5 +105,11 @@ while not Done:
         env.step([throttle, steering], None, False)
         # Render the environment
         env.render()
+        # Check if the boat is inside the map
+        boat_pos = env.get_state()[:2]
+        is_inside = env.is_inside_map(boat_pos[0], boat_pos[1])
+        # If the boat is outside the map, relocate_robot
+        if not is_inside:
+            env.relocate_robot()
 
 pygame.quit()
